@@ -1,0 +1,196 @@
+body {
+    margin: 0;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+
+header {
+    background-color: #264172;
+    padding: 15px 0;
+  }
+  
+nav {
+    display: flex;
+    justify-content: space-between;
+}
+
+.icon a{
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.icon a img{
+    width: 30px;
+    height: 30px;
+    vertical-align: middle;
+}
+
+.navbar-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+}
+
+.navbar-list ul li {
+    margin: 0 15px;
+}
+
+.navbar-list ul li a {
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.navbar-list ul li a:hover {
+    color: black;
+    background-color: white;
+    border-radius: 5px;
+}
+
+.hierarchical-nav{
+    background-color: azure;
+    height: 20px;
+}
+
+.hierarchical-nav a{
+    padding-left: 10px;
+    color: black;
+    font-size: small;
+    
+}
+
+.main-container{
+    display: flex;
+}
+
+.side-nav{
+    width: 500px; 
+    background-color: white;
+    color: white;
+    margin-top: 100px;
+}
+
+.side-nav ul{
+    list-style: none;
+}
+
+.side-nav ul li {
+    padding: 10px;
+    border: 1px solid #122447; 
+}
+
+.side-nav a{
+    color: black;
+    text-align: center;
+    text-decoration: none;
+}
+
+.side-nav a:hover{
+    color: white;
+}
+
+.side-nav ul li:hover{
+    background-color: #333;
+    transition: background-color 0.3s ease;
+}
+
+.flexbox{
+    display: flex;
+    flex-direction: column;
+}
+
+.top10{
+    text-align: center;
+}
+
+.flex-container{
+    display:flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 50px;
+    margin-bottom: 50px;
+}
+
+
+.flex-container > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 20%;
+    margin-bottom: 30px;
+  }
+
+.PriceButton-container{
+    display: flex;
+    flex-direction: row;
+    margin-top: 3px;
+}
+
+
+.PriceButton-container button{
+    background-color: white;
+    border: 2px solid #264172;
+    border-radius: 5px;
+    padding: 12px 8px;
+    font-size: small;
+    margin-left: 30px;
+}
+
+.PriceButton-container button:hover{
+    color: white;
+    background-color: #264172;
+    transition: background-color 0.3s ease;
+}
+
+.flex-container div img{
+    width: 200px;
+    height: 200px;
+}
+
+.flex-container div a{
+    display: flex;
+    flex-direction: column; 
+    text-align: center; 
+    text-decoration: none;
+    color: black;
+}
+  
+
+.footer{
+    display: flex; 
+    justify-content: space-between; 
+    padding: 40px;
+    background-color: #122447;
+    color: white;
+}
+
+.footer form input[type="email"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+  
+.footer form input[type="submit"] {
+    width: 100%;
+    padding: 10px;
+    background-color: white;
+    color: black;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.footer form input[type="submit"]:hover {
+    color: white;
+    background-color: #333;
+    border-radius: 5px;
+}

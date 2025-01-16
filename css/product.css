@@ -1,0 +1,129 @@
+body {
+    margin: 0;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+
+header {
+    background-color: #264172;
+    padding: 15px 0;
+  }
+  
+nav {
+    display: flex;
+    justify-content: space-between;
+}
+
+.icon a{
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.icon a img{
+    width: 30px;
+    height: 30px;
+    vertical-align: middle;
+}
+
+.navbar-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+}
+
+.navbar-list ul li {
+    margin: 0 15px;
+}
+
+.navbar-list ul li a {
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.navbar-list ul li a:hover {
+    color: black;
+    background-color: white;
+    border-radius: 5px;
+}
+
+.hierarchical-nav{
+    background-color: azure;
+    height: 20px;
+    color: gray;
+    font-size: small;
+}
+
+.hierarchical-nav a{
+    padding-left: 10px;
+    color: black;
+    font-size: small;
+    
+}
+
+.product-container{
+    margin-top: 70px;
+    display:flex;
+    flex-direction: row;
+}
+
+.product-container h5{
+    color: gray;
+}
+
+.product-container img{
+    width: 350px;
+    height: 350px;
+}
+
+.product-description{
+    display:flex;
+    flex-direction:column;
+    margin-left: 20px;
+    margin-right: 20px;
+}
+
+.purchase{
+    width: 800px;
+    display:flex;
+    flex-direction:column;
+}
+
+
+.footer{
+    display: flex; 
+    justify-content: space-between; 
+    padding: 40px;
+    background-color: #122447;
+    color: white;
+}
+
+.footer form input[type="email"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+  
+.footer form input[type="submit"] {
+    width: 100%;
+    padding: 10px;
+    background-color: white;
+    color: black;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.footer form input[type="submit"]:hover {
+    color: white;
+    background-color: #333;
+    border-radius: 5px;
+}
