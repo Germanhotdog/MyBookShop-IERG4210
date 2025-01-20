@@ -69,7 +69,7 @@ nav {
 }
 
 .side-nav{
-    width: 500px; 
+    width: 20%; 
     background-color: white;
     color: white;
     margin-top: 100px;
@@ -77,6 +77,7 @@ nav {
 
 .side-nav ul{
     list-style: none;
+    margin-right: 50px;
 }
 
 .side-nav ul li {
@@ -100,6 +101,7 @@ nav {
 }
 
 .flexbox{
+    width: 80%; 
     display: flex;
     flex-direction: column;
 }
@@ -151,6 +153,11 @@ nav {
 .flex-container div img{
     width: 200px;
     height: 200px;
+}
+
+.magazine a > img{
+    width: 200px;
+    height: 280px;
 }
 
 .flex-container div a{
