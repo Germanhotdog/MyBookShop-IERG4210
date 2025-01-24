@@ -142,6 +142,11 @@ nav {
     width: 55%;
 }
 
+#magazine{
+    width: 400px;
+    height: 560px;
+}
+
 .purchase{
     width: 20%;
     display:flex;
