@@ -117,6 +117,23 @@ nav {
     display: flex;
 }
 
+.video-container video{
+    height:600px;
+}
+
+.overlay-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: wheat;
+    font-size: 2rem;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7);
+    pointer-events: none; 
+}
+
 .side-nav{
     width: 20%; 
     background-color: white;
