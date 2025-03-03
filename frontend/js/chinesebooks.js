@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(products => {
             console.log('Products received:', products);
+
             const container = document.getElementById('flex-container');
             if (!container) {
                 console.error('Container not found!');
@@ -17,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             container.innerHTML = products.map(product => `
                 <div>
-                    <a href="/product/${product.pid}">
+                    <a href="./product.html?pid=${product.pid}">
                         <img src="http://localhost:3000${product.image}" alt="${product.name}">
                         <p>${product.name}</p>
                     </a>

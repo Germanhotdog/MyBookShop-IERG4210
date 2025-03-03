@@ -60,6 +60,19 @@ app.get('/api/products', (req, res) => {
     });
 });
 
+// Fetch product by name
+app.get('/api/product/:pid', (req, res) => {
+    const productId = req.params.pid;
+    connection.query(
+        'SELECT * FROM products WHERE pid = ?',
+        [productId],
+        (err, results) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            if (results.length === 0) return res.status(404).json({ error: 'Product not found' });
+            res.json(results[0]);
+        }
+    );
+});
 //Categories API
 app.get('/api/categories', (req, res) => {
     connection.query('SELECT * FROM categories', (err, categories) => {
@@ -114,11 +127,15 @@ app.post('/add-product', (req, res) => {
             res.send(`Error: ${err}`);
             return;
         }
-        const { name, price, description, catid } = req.body;
+        const { name, price, description, author, publisher, catid } = req.body; 
         const image = req.file ? `/uploads/${req.file.filename}` : null;
-        const sql = 'INSERT INTO products (name, price, description, image, catid) VALUES (?, ?, ?, ?, ?)';
-        connection.query(sql, [name, price, description, image, catid], (err) => {
-            if (err) throw err;
+        const sql = 'INSERT INTO products (name, price, description, author, publisher, image, catid) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        connection.query(sql, [name, price, description, author, publisher, image, catid], (err) => {
+            if (err) {
+                console.error('Query Error:', err);
+                res.send('Database error: ' + err.message);
+                return;
+            }
             res.redirect('/admin');
         });
     });
@@ -130,10 +147,10 @@ app.post('/edit-product/:pid', (req, res) => {
             res.send(`Error: ${err}`);
             return;
         }
-        const { name, price, description, catid } = req.body;
+        const { name, price, description, author, publisher, catid } = req.body; 
         const pid = req.params.pid;
-        let sql = 'UPDATE products SET name = ?, price = ?, description = ?, catid = ?';
-        let values = [name, price, description, catid];
+        let sql = 'UPDATE products SET name = ?, price = ?, description = ?, author = ?, publisher = ?, catid = ?';
+        let values = [name, price, description, author, publisher, catid];
         if (req.file) {
             sql += ', image = ?';
             values.push(`/uploads/${req.file.filename}`);
@@ -183,6 +200,8 @@ function generateAdminPage(categories, products) {
             <label>Name: <input type="text" name="name" required></label><br>
             <label>Price: <input type="number" step="0.01" name="price" required></label><br>
             <label>Description: <textarea name="description"></textarea></label><br>
+            <label>Author: <input type="text" name="author" required></label><br>
+            <label>Publisher: <input type="text" name="publisher" required></label><br>
             <label>Category: 
                 <select name="catid" required>
                     ${categories.map(cat => `<option value="${cat.catid}">${cat.name}</option>`).join('')}
@@ -199,6 +218,8 @@ function generateAdminPage(categories, products) {
                     <input type="text" name="name" value="${p.name}" required>
                     <input type="number" step="0.01" name="price" value="${p.price}" required>
                     <textarea name="description">${p.description || ''}</textarea>
+                    <input type="text" name="author" value="${p.author || ''}" required>
+                    <input type="text" name="publisher" value="${p.publisher || ''}" required>
                     <select name="catid" required>
                         ${categories.map(cat => `<option value="${cat.catid}" ${cat.catid === p.catid ? 'selected' : ''}>${cat.name}</option>`).join('')}
                     </select>

@@ -10,14 +10,15 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(products => {
             console.log('Products received:', products);
+        
             const container = document.getElementById('flex-container');
             if (!container) {
                 console.error('Container not found!');
                 return;
             }
             container.innerHTML = products.map(product => `
-                <div class="magazine">
-                    <a href="/product/${product.pid}" >
+                <div>
+                    <a href="./product.html?pid=${product.pid}">
                         <img src="http://localhost:3000${product.image}" alt="${product.name}">
                         <p>${product.name}</p>
                     </a>
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(categories => {
             console.log('Categories received:', categories);
+            
             const categoryContainer = document.getElementById('side-nav-list');
             if (!categoryContainer) {
                 console.error('Category container not found!');

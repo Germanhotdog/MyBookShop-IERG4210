@@ -17,9 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             container.innerHTML = products.map(product => `
                 <div>
-                    <a href="/product/${product.pid}">
+                    <a href="./product.html?pid=${product.pid}">
                         <img src="http://localhost:3000${product.image}" alt="${product.name}">
                         <p>${product.name}</p>
+                        <p style="font-size:10px">Author: ${product.author || 'Unknown'} <br> Publisher: ${product.publisher|| 'Unknown'} </p>
                     </a>
                     <div class="PriceButton-container">
                         <p>$${product.price.toFixed(2)}</p>
