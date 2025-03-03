@@ -1,7 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, fetching products...');
+    const ipaddr = 'localhost';
     //fetch and render products to Frontend
-    fetch('http://localhost:3000/api/englishbooks')
+    fetch(`http://${ipaddr}:3000/api/englishbooks`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -20,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
             container.innerHTML = products.map(product => `
                 <div>
                     <a href="./product.html?pid=${product.pid}">
-                        <img src="http://localhost:3000${product.image}" alt="${product.name}">
+                        <img src="http://${ipaddr}:3000${product.image}" alt="${product.name}">
                         <p>${product.name}</p>
                     </a>
                     <div class="PriceButton-container">
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(error => console.error('Error fetching products:', error));
     
     //fetch and render categories to Frontend
-    fetch('http://localhost:3000/api/categories')
+    fetch(`http://${ipaddr}:3000/api/categories`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);

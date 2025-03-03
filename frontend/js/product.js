@@ -1,12 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, fetching product...');
-
+    const ipaddr = 'localhost';
     // Get product pid from URL query parameter
     const urlParams = new URLSearchParams(window.location.search);
     const productId = urlParams.get('pid');
     console.log('Product ID from URL:', productId);
 
-    fetch(`http://localhost:3000/api/product/${productId}`)
+    fetch(`http://${ipaddr}:3000/api/product/${productId}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const productContainer = document.querySelector('.product-container');
             if (productContainer) {
                 productContainer.innerHTML = `
-                    <img src="http://localhost:3000${product.image}" alt="${product.name}">
+                    <img src="http://${ipaddr}:3000${product.image}" alt="${product.name}">
                     <div class="product-description">
                         <h2>${product.name}</h2>
                         <h5>Author: ${product.author || 'Unknown'} <br> Publisher: ${product.publisher|| 'Unknown'} </h5>
