@@ -22,15 +22,14 @@
                         <li><a href="#">Contact</a></li>
                         <li class="icon">
                             <a href="#"> shopping list <img src="./image/cart.png" alt="cart" ></a>
-                            
-                            <div class="shopping-list">
-                                <ul>
-                                    <li>Elon Musk <br>Quantity: 1<br>- $199</li>
-                                    <li>The Art of The Deal <br>Quantity: 1<br>- $79</li>
-                                    <li>skmt 坂本龍一是誰 <br>Quantity: 1<br>- $109</li>
-                                </ul>
+                        
 
-                                <button>checkout</button>
+                            <div class="shopping-list">
+                                <ul id="cart-items">
+                                    <!-- Cart items will be dynamically added here -->
+                                </ul>
+                                <p>Total: $<span id="cart-total">0.00</span></p>
+                                <button id="checkout-btn">Checkout</button>
                             </div>
                         </li>
                       </ul>
