@@ -151,13 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 let categoryLink = '';
                 switch (product.catid) {
                     case 1:
-                        categoryLink = '<a href="./chinesebooks.html">Chinese Books</a>';
+                        categoryLink = `<a href="./category.html?catid=${product.catid}">Chinese Books</a>`;
                         break;
                     case 2:
-                        categoryLink = '<a href="./englishbooks.html">English Books</a>';
+                        categoryLink = `<a href="./category.html?catid=${product.catid}">English Books</a>`;
                         break;
                     case 3:
-                        categoryLink = '<a href="./magazines.html">Magazines</a>';
+                        categoryLink = `<a href="./category.html?catid=${product.catid}">Magazines</a>`;
                         break;
                     default:
                         categoryLink = '<a href="#">Unknown Category</a>';

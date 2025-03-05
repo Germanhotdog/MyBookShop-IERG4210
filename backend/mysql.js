@@ -48,14 +48,12 @@ app.get('/admin', (req, res) => {
     });
 });
 
-//Product API
+//Product API (and also by catid)
 app.get('/api/products', (req, res) => {
-    connection.query('SELECT * FROM products', (err, products) => {
-        if (err) {
-            console.error('Query Error:', err);
-            res.status(500).json({ error: 'Database error' });
-            return;
-        }
+    const catid = req.query.catid;
+    const sql = catid ? 'SELECT * FROM products WHERE catid = ?' : 'SELECT * FROM products';
+    connection.query(sql, [catid], (err, products) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
         res.json(products);
     });
 });
@@ -82,6 +80,16 @@ app.get('/api/categories', (req, res) => {
             return;
         }
         res.json(categories);
+    });
+});
+
+//Categories API with specific categories
+app.get('/api/categories/:catid', (req, res) => {
+    const catid = req.params.catid;
+    connection.query('SELECT * FROM categories WHERE catid = ?', [catid], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (results.length === 0) return res.status(404).json({ error: 'Category not found' });
+        res.json(results[0]);
     });
 });
 

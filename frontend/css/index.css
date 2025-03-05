@@ -113,6 +113,11 @@ nav {
     
 }
 
+.hierarchical-nav span{
+    color: gray;
+    font-size: small;
+}
+
 .main-container{
     display: flex;
 }

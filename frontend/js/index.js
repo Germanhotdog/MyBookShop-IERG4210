@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             categoryContainer.innerHTML = categories.map(category => `
-                <a href="${category.name.toLowerCase().replace(/\s+/g, '')}.html">
+                <a href="category.html?catid=${category.catid}">
                     <li>${category.name}</li>
                 </a>
             `).join('');

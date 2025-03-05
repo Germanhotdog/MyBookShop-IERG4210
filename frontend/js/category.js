@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, fetching products...');
-    const ipaddr = 'localhost';
+    const ipaddr = 'localhost'; 
 
     // CartItem class to represent a single item in the cart
     class CartItem {
@@ -128,8 +127,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize cart
     const cart = new Cart();
 
-    //fetch and render products to Frontend
-    fetch(`http://${ipaddr}:3000/api/chinesebooks`)
+    // Get catid from URL query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const catid = urlParams.get('catid');
+    if (!catid) {
+        console.error('No category ID found in URL');
+        return;
+    }
+
+    // Fetch category details
+    fetch(`http://${ipaddr}:3000/api/categories/${catid}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(category => {
+            document.getElementById('category-name').textContent = category.name;
+            document.getElementById('category-title').textContent = `${category.name}`;
+        })
+        .catch(error => console.error('Error fetching category:', error));
+
+    // Fetch and render products for this category
+    fetch(`http://${ipaddr}:3000/api/products?catid=${catid}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -137,22 +158,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return response.json();
         })
         .then(products => {
-            console.log('Products received:', products);
-
             const container = document.getElementById('flex-container');
-            if (!container) {
-                console.error('Container not found!');
-                return;
-            }
             container.innerHTML = products.map(product => `
                 <div>
                     <a href="./product.html?pid=${product.pid}">
                         <img src="http://${ipaddr}:3000${product.image}" alt="${product.name}">
                         <p>${product.name}</p>
+                        <p style="font-size:10px">Author: ${product.author || 'Unknown'} <br> Publisher: ${product.publisher || 'Unknown'}</p>
                     </a>
                     <div class="PriceButton-container">
                         <p>$${product.price.toFixed(2)}</p>
-                        <button class = "add-to-cart" data-pid="${product.pid}">Add to cart</button>
+                        <button class="add-to-cart" data-pid="${product.pid}">Add to cart</button>
                     </div>
                 </div>
             `).join('');
@@ -164,11 +180,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     cart.addItem(pid);
                 });
             });
-            
         })
         .catch(error => console.error('Error fetching products:', error));
-    
-    //fetch and render categories to Frontend
+
+    // Fetch and render categories for side navigation
     fetch(`http://${ipaddr}:3000/api/categories`)
         .then(response => {
             if (!response.ok) {
@@ -177,14 +192,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return response.json();
         })
         .then(categories => {
-            console.log('Categories received:', categories);
             const categoryContainer = document.getElementById('side-nav-list');
-            if (!categoryContainer) {
-                console.error('Category container not found!');
-                return;
-            }
             categoryContainer.innerHTML = categories.map(category => `
-                <a href="${category.name.toLowerCase().replace(/\s+/g, '')}.html">
+                <a href="category.html?catid=${category.catid}">
                     <li>${category.name}</li>
                 </a>
             `).join('');
@@ -217,5 +227,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial render of cart
     cart.render();
-    
 });
