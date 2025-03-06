@@ -6,6 +6,7 @@ const cors = require('cors');
 const app = express();
 
 const connection = mysql.createConnection({
+    //if mysql.js is now in EC2, change to 'localhost'
     host: '54.165.208.37',
     user: 'test',
     password: 'test',
@@ -35,7 +36,7 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('frontend'));
+app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
 app.get('/admin', (req, res) => {
@@ -93,6 +94,43 @@ app.get('/api/categories/:catid', (req, res) => {
     });
 });
 
+// Add category
+app.post('/add-category', (req, res) => {
+    const { name } = req.body;
+    connection.query('INSERT INTO categories (name) VALUES (?)', [name], (err) => {
+        if (err) {
+            console.error('Query Error:', err);
+            return res.status(500).send('Database error: ' + err.message);
+        }
+        res.redirect('/admin');
+    });
+});
+
+// Edit category
+app.post('/edit-category/:catid', (req, res) => {
+    const { name } = req.body;
+    const catid = req.params.catid;
+    connection.query('UPDATE categories SET name = ? WHERE catid = ?', [name, catid], (err) => {
+        if (err) {
+            console.error('Query Error:', err);
+            return res.status(500).send('Database error: ' + err.message);
+        }
+        res.redirect('/admin');
+    });
+});
+
+// Delete category
+app.post('/delete-category/:catid', (req, res) => {
+    const catid = req.params.catid;
+    connection.query('DELETE FROM categories WHERE catid = ?', [catid], (err) => {
+        if (err) {
+            console.error('Query Error:', err);
+            return res.status(500).send('Database error: ' + err.message);
+        }
+        res.redirect('/admin');
+    });
+});
+
 //Chinese books API
 app.get('/api/chinesebooks', (req, res) => {
     connection.query('SELECT * FROM products WHERE catid = 1', (err, products) => {
@@ -117,7 +155,7 @@ app.get('/api/englishbooks', (req, res) => {
     });
 });
 
-////Magazines API
+//Magazines API
 app.get('/api/magazines', (req, res) => {
     connection.query('SELECT * FROM products WHERE catid = 3', (err, products) => {
         if (err) {
@@ -199,47 +237,81 @@ function generateAdminPage(categories, products) {
     <head>
         <title>Admin Panel</title>
         <link rel="stylesheet" href="/styles.css">
+        <style>
+            .section { margin: 20px 0; }
+            form { margin: 10px 0; }
+            .category-item, .product-item { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
+        </style>
     </head>
     <body>
         <h1>Admin Panel</h1>
-        
-        <h2>Add Product</h2>
-        <form action="/add-product" method="POST" enctype="multipart/form-data">
-            <label>Name: <input type="text" name="name" required></label><br>
-            <label>Price: <input type="number" step="0.01" name="price" required></label><br>
-            <label>Description: <textarea name="description"></textarea></label><br>
-            <label>Author: <input type="text" name="author" required></label><br>
-            <label>Publisher: <input type="text" name="publisher" required></label><br>
-            <label>Category: 
-                <select name="catid" required>
-                    ${categories.map(cat => `<option value="${cat.catid}">${cat.name}</option>`).join('')}
-                </select>
-            </label><br>
-            <label>Image: <input type="file" name="image" accept=".jpg,.gif,.png"></label><br>
-            <button type="submit">Add Product</button>
-        </form>
 
-        <h2>Manage Products</h2>
-        ${products.map(p => `
-            <div>
-                <form action="/edit-product/${p.pid}" method="POST" enctype="multipart/form-data">
-                    <input type="text" name="name" value="${p.name}" required>
-                    <input type="number" step="0.01" name="price" value="${p.price}" required>
-                    <textarea name="description">${p.description || ''}</textarea>
-                    <input type="text" name="author" value="${p.author || ''}" required>
-                    <input type="text" name="publisher" value="${p.publisher || ''}" required>
+        <div class="section">
+            <h2>Add Category</h2>
+            <form action="/add-category" method="POST">
+                <label>Name: <input type="text" name="name" required></label><br>
+                <button type="submit">Add Category</button>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>Manage Categories</h2>
+            ${categories.map(cat => `
+                <div class="category-item">
+                    <form action="/edit-category/${cat.catid}" method="POST">
+                        <label>Name: <input type="text" name="name" value="${cat.name}" required></label>
+                        <button type="submit">Update</button>
+                    </form>
+                    <form action="/delete-category/${cat.catid}" method="POST">
+                        <button type="submit">Delete</button>
+                    </form>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="section">
+            <h2>Add Product</h2>
+            <form action="/add-product" method="POST" enctype="multipart/form-data">
+                <label>Name: <input type="text" name="name" required></label><br>
+                <label>Price: <input type="number" step="0.01" name="price" required></label><br>
+                <label>Description: <textarea name="description"></textarea></label><br>
+                <label>Author: <input type="text" name="author" required></label><br>
+                <label>Publisher: <input type="text" name="publisher" required></label><br>
+                <label>Category: 
                     <select name="catid" required>
-                        ${categories.map(cat => `<option value="${cat.catid}" ${cat.catid === p.catid ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                        ${categories.map(cat => `<option value="${cat.catid}">${cat.name}</option>`).join('')}
                     </select>
-                    <input type="file" name="image" accept=".jpg,.gif,.png">
-                    ${p.image ? `<img src="${p.image}" width="50">` : 'No image'}
-                    <button type="submit">Update</button>
-                </form>
-                <form action="/delete-product/${p.pid}" method="POST">
-                    <button type="submit">Delete</button>
-                </form>
-            </div>
-        `).join('')}
+                </label><br>
+                <label>Image: <input type="file" name="image" accept=".jpg,.gif,.png"></label><br>
+                <button type="submit">Add Product</button>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>Manage Products</h2>
+            ${products.map(p => `
+                <div class="product-item">
+                    <form action="/edit-product/${p.pid}" method="POST" enctype="multipart/form-data">
+                        <label>Name: <input type="text" name="name" value="${p.name}" required></label>
+                        <label>Price: <input type="number" step="0.01" name="price" value="${p.price}" required></label>
+                        <label>Description: <textarea name="description">${p.description || ''}</textarea></label>
+                        <label>Author: <input type="text" name="author" value="${p.author || ''}" required></label>
+                        <label>Publisher: <input type="text" name="publisher" value="${p.publisher || ''}" required></label>
+                        <label>Category: 
+                            <select name="catid" required>
+                                ${categories.map(cat => `<option value="${cat.catid}" ${cat.catid === p.catid ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label>Image: <input type="file" name="image" accept=".jpg,.gif,.png"></label>
+                        ${p.image ? `<img src="${p.image}" width="50">` : 'No image'}
+                        <button type="submit">Update</button>
+                    </form>
+                    <form action="/delete-product/${p.pid}" method="POST">
+                        <button type="submit">Delete</button>
+                    </form>
+                </div>
+            `).join('')}
+        </div>
     </body>
     </html>
     `;
