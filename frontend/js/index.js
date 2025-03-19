@@ -1,5 +1,5 @@
 // Escape HTML to prevent XSS (corrected from previous version)
-function escapeHtml(unsafe) {
+  function escapeHtml(unsafe) {
     return String(unsafe)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -144,6 +144,9 @@ function escapeHtml(unsafe) {
     }
   
     const cart = new Cart();
+    // Display username from localStorage
+    const username = localStorage.getItem('username') || 'guest';
+    document.getElementById('username').textContent = username;
   
     // Fetch and render products
     fetch(`https://${ipaddr}:3000/api/products`)

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MyBookShop</title>
+    <link rel="stylesheet" href="./css/login.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="icon">
+                <a href="./index.html">MyBookShop <img src="./image/icon.png" alt="Icon"></a>
+            </div>
+            <div class="navbar-list">
+                <ul>
+                    <li><a href="./index.html">Home</a></li>
+                    <li><a href="#">About Us</a></li>
+                    <li><a href="./login.html">Login</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <div class="login-container">
+        <h2>Login to MyBookShop</h2>
+        <form id="login-form">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <p id="error-message" style="color: red; display: none;"></p>
+    </div>
+
+    <footer class="footer">
+        <section>
+            About Us<br>
+            <div>
+                <p>Working hour:</p>
+                <p>Mon-Fri: 10:00-21:00</p>
+                <p>Sat: 10:00-17:00</p>
+                <p>Sun: Close</p>
+            </div>
+        </section>
+        <section>
+            Contact<br>
+            <div>
+                <p>Chinese University of Hong Kong, Shatin, Hong Kong</p>
+                <p>+852 1234 5678</p>
+                <p>mybookshop@gmail.com</p>
+            </div>
+        </section>
+        <section>
+            Weekly Newsletter<br>
+            <form action="">
+                <input type="email" placeholder="Your Email here" required />
+                <input type="submit" value="Subscribe Now" />
+            </form>
+        </section>
+    </footer>
+
+    <script src="./js/login.js"> </script>
+</body>
+</html>

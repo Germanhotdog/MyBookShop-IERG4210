@@ -9,6 +9,7 @@ const helmet = require('helmet'); // For CSP and other headers
 const app = express();
 const https = require('https');
 const fs = require('fs');
+const bcrypt = require('bcrypt');
 
 const connection = mysql.createConnection({
     //if mysql.js is now in EC2, change to 'localhost'
@@ -72,6 +73,67 @@ app.get('/admin', (req, res) => {
             res.send(generateAdminPage(categories, products));
         });
     });
+});
+
+//register
+app.post('/register', async (req, res) => {
+    const { username, email, password } = req.body;
+    try {
+        const hashedPassword = await hashPassword(password);
+        const sql = 'INSERT INTO user (username, email, password, is_admin) VALUES (?, ?, ?, ?)';
+        connection.query(sql, [username, email, hashedPassword, false], (err) => {
+            if (err) {
+                console.error('Query Error:', err);
+                return res.status(500).send('Database error: ' + err.message);
+            }
+            res.redirect('/login');
+        });
+    } catch (err) {
+        res.status(500).send('Error hashing password: ' + err.message);
+    }
+});
+
+// Function to hash password (same as above)
+const hashPassword = async (password) => {
+    const saltRounds = 10;
+    const salt = await bcrypt.genSalt(saltRounds);
+    return await bcrypt.hash(password, salt);
+};
+
+// Login route (AJAX)
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
+    }
+
+    try {
+        connection.query('SELECT * FROM user WHERE email = ?', [email], async (err, results) => {
+            if (err) {
+                console.error('Query Error:', err);
+                return res.status(500).json({ message: 'Database error' });
+            }
+            if (results.length === 0) {
+                return res.status(401).json({ message: 'Invalid email or password' });
+            }
+
+            const user = results[0];
+            const match = await bcrypt.compare(password, user.password);
+            if (!match) {
+                return res.status(401).json({ message: 'Invalid email or password' });
+            }
+
+            // Store user info in session (if using express-session)
+            // For now, we'll just return the user info
+            res.json({
+                username: user.username,
+                is_admin: user.is_admin,
+            });
+        });
+    } catch (err) {
+        console.error('Login Error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
 
 // Product API
@@ -373,6 +435,7 @@ function generateAdminPage(categories, products) {
     </head>
     <body>
         <h1>Admin Panel</h1>
+        <h2>By Kwan Chun Kit</h2>
 
         <div class="section">
             <h2>Add Category</h2>
