@@ -3,6 +3,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     const errorMessage = document.getElementById('error-message');
+    const csrfToken = document.querySelector('input[name="_csrf"]').value;
 
     console.log('Sending login request:', { email, password });
 
@@ -12,7 +13,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, password, _csrf: csrfToken }),
             credentials: 'include' // Include cookies in the request
         });
 

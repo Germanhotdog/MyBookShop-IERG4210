@@ -11,6 +11,7 @@ const https = require('https');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 const session = require('express-session'); // Add express-session
+const csrf = require('csurf');
 
 const connection = mysql.createConnection({
     //if mysql.js is now in EC2, change to 'localhost'
@@ -91,6 +92,15 @@ app.use(
     })
 );
 
+// Configure csurf middleware
+const csrfProtection = csrf({ cookie: false });
+// app.use((req, res, next) => {
+//     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+//         return next();
+//     }
+//     csrfProtection(req, res, next);
+// });
+
 // Input validation and sanitization functions
 const sanitizeInput = (input) => sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} });
 const validateNumber = (input) => !isNaN(input) && Number(input) >= 0;
@@ -117,7 +127,12 @@ app.get('/admin', (req, res) => {
         if (err) throw err;
         connection.query('SELECT * FROM products', (err, products) => {
             if (err) throw err;
-            res.send(generateAdminPage(categories, products,req.session.user));
+            // Add CSRF token to user object for rendering
+            const userWithCsrf = {
+                ...req.session.user,
+                csrfToken: req.csrfToken ? req.csrfToken() : ''
+            };
+            res.send(generateAdminPage(categories, products,userWithCsrf));
         });
     });
 });
@@ -151,7 +166,7 @@ const rateLimit = require('express-rate-limit');
 
 // Login route (AJAX) rateLimit with 15 minutes, Limit to 5 requests per window
 app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 5 }), async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, _csrf } = req.body;
     if (!email || !password) {
         return res.status(400).json({ message: `Email${email} and password${password} are required` });
     }
@@ -274,6 +289,9 @@ const isAdmin = (req, res, next) => {
 
 // Login page
 app.get('/login', (req, res) => {
+    // Generate CSRF token
+    const csrfToken = req.csrfToken ? req.csrfToken() : '';
+
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -302,6 +320,7 @@ app.get('/login', (req, res) => {
             <div class="login-container">
                 <h2>Login to MyBookShop</h2>
                 <form id="login-form">
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
                     <div class="form-group">
                         <label for="email">Email:</label>
                         <input type="email" id="email" name="email" required>
@@ -586,6 +605,7 @@ function generateAdminPage(categories, products, user) {
             <h1>Admin Panel</h1>
             <h2>By Kwan Chun Kit</h2>
             <p>Logged in as: ${escapeHtml(user.username)} | <button onclick="logout()">Logout</button></p>
+            <input type="hidden" name="_csrf" value="${user.csrfToken}">
 
             <div class="section">
                 <h2>Add Category</h2>
@@ -600,10 +620,12 @@ function generateAdminPage(categories, products, user) {
                 ${categories.map(cat => `
                     <div class="category-item">
                         <form action="/edit-category/${escapeHtml(String(cat.catid))}" method="POST" onsubmit="return validateForm(this)">
+                            <input type="hidden" name="_csrf" value="${user.csrfToken}">    
                             <label>Name: <input type="text" name="name" value="${escapeHtml(cat.name)}" required maxlength="255" pattern="[^<>"']+"></label>
-                            <button type="submit">Update</button>
+                                <button type="submit">Update</button>
                         </form>
                         <form action="/delete-category/${escapeHtml(String(cat.catid))}" method="POST">
+                            <input type="hidden" name="_csrf" value="${user.csrfToken}">
                             <button type="submit">Delete</button>
                         </form>
                     </div>
@@ -613,6 +635,7 @@ function generateAdminPage(categories, products, user) {
             <div class="section">
                 <h2>Add Product</h2>
                 <form action="/add-product" method="POST" enctype="multipart/form-data" onsubmit="return validateForm(this)">
+                    <input type="hidden" name="_csrf" value="${user.csrfToken}">
                     <label>Name: <input type="text" name="name" required maxlength="255" pattern="[^<>"']+"></label><br>
                     <label>Price: <input type="number" name="price" required min="0" max="10000" step="0.01"></label><br>
                     <label>Description: <textarea name="description" maxlength="1000"></textarea></label><br>
@@ -633,6 +656,7 @@ function generateAdminPage(categories, products, user) {
                 ${products.map(p => `
                     <div class="product-item">
                         <form action="/edit-product/${escapeHtml(String(p.pid))}" method="POST" enctype="multipart/form-data" onsubmit="return validateForm(this)">
+                            <input type="hidden" name="_csrf" value="${user.csrfToken}">
                             <label>Name: <input type="text" name="name" value="${escapeHtml(p.name)}" required maxlength="255" pattern="[^<>"']+"></label>
                             <label>Price: <input type="number" name="price" value="${escapeHtml(String(p.price))}" required min="0" max="10000" step="0.01"></label>
                             <label>Description: <textarea name="description" maxlength="1000">${escapeHtml(p.description || '')}</textarea></label>
@@ -648,6 +672,7 @@ function generateAdminPage(categories, products, user) {
                             <button type="submit">Update</button>
                         </form>
                         <form action="/delete-product/${escapeHtml(String(p.pid))}" method="POST">
+                            <input type="hidden" name="_csrf" value="${user.csrfToken}">
                             <button type="submit">Delete</button>
                         </form>
                     </div>
