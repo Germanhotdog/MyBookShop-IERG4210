@@ -45,16 +45,16 @@ function escapeHtml(unsafe) {
         this.loadFromLocalStorage();
       }
   
-      addItem(pid, quantity = 1) {
+      addItem(pid) {
         if (!validateInteger(pid)) {
           console.error('Invalid pid:', pid);
           return;
         }
         if (this.items.has(pid)) {
           const item = this.items.get(pid);
-          item.setQuantity(item.quantity + parseInt(quantity, 10));
+          item.setQuantity(item.quantity + 1);
         } else {
-          this.items.set(pid, new CartItem(pid, quantity));
+          this.items.set(pid, new CartItem(pid));
           this.fetchProductDetails(pid);
         }
         this.saveToLocalStorage();
@@ -214,10 +214,11 @@ function escapeHtml(unsafe) {
               <button class="add-to-cart" data-pid="${escapeHtml(String(product.pid))}">Add to cart</button>
             </div>
           `;
-          document.querySelector('.add-to-cart').addEventListener('click', () => {
-            const quantity = parseInt(document.getElementById('quantity').value, 10);
-            const pid = product.pid;
-            if (validateInteger(quantity)) cart.addItem(pid, quantity);
+          document.querySelectorAll('.add-to-cart').forEach(button => {
+            button.addEventListener('click', e => {
+              const pid = e.target.dataset.pid;
+              if (validateInteger(pid)) cart.addItem(pid);
+            });
           });
         }
       })
@@ -230,8 +231,14 @@ function escapeHtml(unsafe) {
     const shoppingList = document.querySelector('.shopping-list');
     if (shoppingList) {
       shoppingList.addEventListener('click', e => {
-        const pid = e.target.dataset.pid;
+        const pid = e.target.dataset.pid; // Convert to number
+        console.log(`Value: ${pid}, Type: ${typeof pid}`); // Should now show Type: number
         if (!pid || !validateInteger(pid)) return;
+
+        console.log('Types of keys in cart.items:');
+          for (const key of cart.items.keys()) {
+              console.log(`Key: ${key}, Type: ${typeof key}`);
+          }
   
         if (e.target.classList.contains('increment')) {
           const item = cart.items.get(pid);

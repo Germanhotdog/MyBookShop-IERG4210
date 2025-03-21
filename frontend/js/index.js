@@ -210,7 +210,13 @@
   
     // Event delegation for cart interactions
     document.addEventListener('click', e => {
-      const pid = e.target.dataset.pid;
+      const pid = e.target.dataset.pid; // Convert to number
+      console.log(`Value: ${pid}, Type: ${typeof pid}`); // Should now show Type: number
+
+      console.log('Types of keys in cart.items:');
+        for (const key of cart.items.keys()) {
+            console.log(`Key: ${key}, Type: ${typeof key}`);
+        }
       if (!pid || !validateInteger(pid)) return;
   
       if (e.target.classList.contains('increment')) {
