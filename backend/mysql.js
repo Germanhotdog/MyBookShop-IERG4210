@@ -164,8 +164,8 @@ const hashPassword = async (password) => {
 
 const rateLimit = require('express-rate-limit');
 
-// Login route (AJAX) rateLimit with 15 minutes, Limit to 5 requests per window
-app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 5 }), async (req, res) => {
+// Login route (AJAX) rateLimit with 15 minutes, Limit to 100 requests per window
+app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 100 }), async (req, res) => {
     const { email, password, _csrf } = req.body;
     if (!email || !password) {
         return res.status(400).json({ message: `Email${email} and password${password} are required` });
@@ -291,7 +291,45 @@ const isAdmin = (req, res, next) => {
 app.get('/login', (req, res) => {
     // Generate CSRF token
     const csrfToken = req.csrfToken ? req.csrfToken() : '';
+    if(req.session.user){
+        // User is logged in, show logout button
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Login - MyBookShop</title>
+                <link rel="stylesheet" href="/login.css">
+            </head>
+            <body>
+                <header>
+                    <nav>
+                        <div class="icon">
+                            <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                        </div>
+                        <div class="navbar-list">
+                            <ul>
+                                <li><a href="/">Home</a></li>
+                                <li><a href="#">About Us</a></li>
+                                <li><a href="/change-password">Change Password</a></li>
+                            </ul>
+                        </div>
+                    </nav>
+                </header>
 
+                <div class="logout-container">
+                    <h2>You are logged in as ${req.session.user.username}</h2>
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                    <button id="logout-button-main">Logout</button>
+                </div>
+
+                <script src="/login.js"></script>
+            </body>
+            </html>
+        `);
+    }
+    else{
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -330,6 +368,7 @@ app.get('/login', (req, res) => {
                         <input type="password" id="password" name="password" required>
                     </div>
                     <button type="submit">Login</button>
+                    <a href="/change-password">Change Password</a>
                 </form>
                 <p id="error-message" style="color: red; display: none;"></p>
             </div>
@@ -338,6 +377,131 @@ app.get('/login', (req, res) => {
         </body>
         </html>
     `);
+    }
+});
+
+app.get('/change-password', (req, res) => {
+
+    const csrfToken = req.csrfToken ? req.csrfToken() : '';
+    console.log('GET /change-password - CSRF token:', csrfToken);
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Change Password - MyBookShop</title>
+            <link rel="stylesheet" href="/login.css">
+        </head>
+        <body>
+            <header>
+                <nav>
+                    <div class="icon">
+                        <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                    </div>
+                    <div class="navbar-list">
+                        <ul>
+                            <li><a href="/">Home</a></li>
+                            <li><a href="#">About Us</a></li>
+                            <li><a href="/logout">Logout</a></li>
+                        </ul>
+                    </div>
+                </nav>
+            </header>
+
+            <div class="change-password-container">
+                <h2>Change Password</h2>
+                <form id="change-password-form" method="POST" action="/change-password">
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                    <div class="form-group">
+                        <label for="current-password">Current Password:</label>
+                        <input type="password" id="current-password" name="currentPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password:</label>
+                        <input type="password" id="new-password" name="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm New Password:</label>
+                        <input type="password" id="confirm-password" name="confirmPassword" required>
+                    </div>
+                    <button type="submit">Change Password</button>
+                </form>
+                <p id="error-message" style="color: red; display: none;"></p>
+            </div>
+
+            <script src="/login.js"></script>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/change-password', async (req, res) => {
+    // Check if the user is logged in
+    if (!req.session.user) {
+        return res.status(401).json({ message: 'You must be logged in to change your password' });
+    }
+
+    const { currentPassword, newPassword, confirmPassword, _csrf } = req.body;
+
+    // Validate input
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+        return res.status(400).json({ message: 'New password and confirmation do not match' });
+    }
+
+    if (newPassword.length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters long' });
+    }
+
+    try {
+        // Fetch the user from the database
+        const [user] = await new Promise((resolve, reject) => {
+            connection.query('SELECT * FROM user WHERE id = ?', [req.session.user.id], (err, results) => {
+                if (err) return reject(err);
+                resolve(results);
+            });
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Validate the current password
+        const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ message: 'Current password is incorrect' });
+        }
+
+        // Hash the new password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update the password in the database
+        await new Promise((resolve, reject) => {
+            connection.query('UPDATE user SET password = ? WHERE id = ?', [hashedNewPassword, req.session.user.id], (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+
+        // Destroy the session to log out the user
+        req.session.destroy((err) => {
+            if (err) {
+                console.error('Session destruction error:', err);
+                return res.status(500).json({ message: 'Failed to log out after password change' });
+            }
+
+            res.clearCookie('auth_token');
+            res.json({ message: 'Password changed successfully. You have been logged out.' });
+        });
+    } catch (err) {
+        console.error('Change password error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
 
 // Add category
@@ -554,57 +718,12 @@ function generateAdminPage(categories, products, user) {
                 .category-item, .product-item { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
                 .error { color: red; }
             </style>
-            <script>
-                function validateForm(form) {
-                    const inputs = form.querySelectorAll('input, textarea, select');
-                    for (let input of inputs) {
-                        if (input.name === 'name' || input.name === 'author' || input.name === 'publisher') {
-                            if (!input.value || input.value.length > 255 || /[<>&"']/.test(input.value)) {
-                                alert('Text fields must be non-empty, max 255 chars, no HTML');
-                                return false;
-                            }
-                        }
-                        if (input.name === 'price') {
-                            const val = parseFloat(input.value);
-                            if (isNaN(val) || val < 0 || val > 10000) {
-                                alert('Price must be a number between 0 and 10000');
-                                return false;
-                            }
-                        }
-                        if (input.name === 'description' && input.value.length > 1000) {
-                            alert('Description max 1000 chars');
-                            return false;
-                        }
-                        if (input.name === 'catid' && !/^\d+$/.test(input.value)) {
-                            alert('Category must be a valid ID');
-                            return false;
-                        }
-                    }
-                    return true;
-                }
-
-                function logout() {
-                    fetch('/logout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        alert(data.message);
-                        window.location.href = '/login';
-                    })
-                    .catch(err => {
-                        console.error('Logout error:', err);
-                        alert('Logout failed');
-                    });
-                }
-            </script>
+            
         </head>
         <body>
             <h1>Admin Panel</h1>
             <h2>By Kwan Chun Kit</h2>
-            <p>Logged in as: ${escapeHtml(user.username)} | <button onclick="logout()">Logout</button></p>
+            <p>Logged in as: ${escapeHtml(user.username)} | <button id="logout-button">Logout</button></p>
             <input type="hidden" name="_csrf" value="${user.csrfToken}">
 
             <div class="section">
@@ -678,6 +797,8 @@ function generateAdminPage(categories, products, user) {
                     </div>
                 `).join('')}
             </div>
+
+            <script src="/admin.js"></script>
         </body>
         </html>
         `;
