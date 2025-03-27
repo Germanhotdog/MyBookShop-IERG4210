@@ -12,10 +12,12 @@ const fs = require('fs');
 const bcrypt = require('bcrypt');
 const session = require('express-session'); // Add express-session
 const csrf = require('csurf');
+var bodyParser = require('body-parser');
+var busboyBodyParser = require('busboy-body-parser');
 
 const connection = mysql.createConnection({
     //if mysql.js is now in EC2, change to 'localhost'
-    host: '54.165.208.37',
+    host: 'localhost',
     user: 'test',
     password: 'test',
     database: 'MYBOOKSHOP'
@@ -40,13 +42,24 @@ const upload = multer({
             cb('Error: Only JPG, GIF, or PNG files allowed!');
         }
     }
-}).single('image');
+});
+
+const handleMulterError = (err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        console.error('Multer error:', err);
+        return res.status(400).send('File upload error: ' + err.message);
+    } else if (err) {
+        console.error('File upload error:', err);
+        return res.status(400).send('File upload error: ' + err.message);
+    }
+    next();
+};
 
 //if mysql.js is now in EC2, change to 'localhost'
 const MySQLStore = require('express-mysql-session')(session);
 const sessionStore = new MySQLStore({
     //if mysql.js is now in EC2, change to 'localhost'
-    host: '54.165.208.37',
+    host: 'localhost',
     user: 'test',
     password: 'test',
     database: 'MYBOOKSHOP'
@@ -72,8 +85,20 @@ app.use(cors({
     origin: 'https://s13.ierg4210.ie.cuhk.edu.hk', // Allow requests from this origin
     credentials: true // Allow cookies to be sent
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+//parse multipart/form-data    
+
+// parse application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({
+extended: true
+}));
+
+// parse application/json
+app.use(bodyParser.json());
+
+
+//parse multipart/form-data    
+app.use(busboyBodyParser());
+
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(helmet()); // Adds security headers including CSP
@@ -94,19 +119,24 @@ app.use(
 
 // Configure csurf middleware
 const csrfProtection = csrf({ cookie: false });
-// app.use((req, res, next) => {
-//     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-//         return next();
-//     }
-//     csrfProtection(req, res, next);
-// });
+app.use((req, res, next) => {
+     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+         return next();
+     }
+    console.log(`${req.method} ${req.path} - req.body:`, req.body);
+    console.log(`${req.method} ${req.path} - req.file:`, req.file);
+    console.log(`${req.method} ${req.path} - Session CSRF token:`, req.session.csrfToken);
+    console.log(`${req.method} ${req.path} - CSRF token from body:`, req.body._csrf);
+    console.log(`${req.method} ${req.path} - CSRF token match:`, req.session.csrfToken === req.body._csrf);
+     csrfProtection(req, res, next);
+ });
 
 // Input validation and sanitization functions
 const sanitizeInput = (input) => sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} });
 const validateNumber = (input) => !isNaN(input) && Number(input) >= 0;
 const validateInteger = (input) => Number.isInteger(Number(input)) && Number(input) >= 0;
 
-app.get('/admin', (req, res) => {
+app.get('/admin',csrfProtection, (req, res) => {
     // Check if the user is authenticated and an admin
     if (!req.session.user || !req.session.user.is_admin) {
         return res.status(403).send(`
@@ -127,10 +157,11 @@ app.get('/admin', (req, res) => {
         if (err) throw err;
         connection.query('SELECT * FROM products', (err, products) => {
             if (err) throw err;
-            // Add CSRF token to user object for rendering
+            // Use the existing CSRF token from the session, or generate a new one if missing
+            const csrfToken = req.session.csrfToken;
             const userWithCsrf = {
                 ...req.session.user,
-                csrfToken: req.csrfToken ? req.csrfToken() : ''
+                csrfToken: csrfToken
             };
             res.send(generateAdminPage(categories, products,userWithCsrf));
         });
@@ -165,7 +196,12 @@ const hashPassword = async (password) => {
 const rateLimit = require('express-rate-limit');
 
 // Login route (AJAX) rateLimit with 15 minutes, Limit to 100 requests per window
-app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 100 }), async (req, res) => {
+app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 100 }),csrfProtection, async (req, res) => {
+    console.log('POST /login - Session:', req.session);
+    console.log('POST /login - Session CSRF token:', req.session.csrfToken);
+    console.log('POST /login - Body:', req.body);
+    console.log('POST /login - CSRF token from body:', req.body._csrf);
+
     const { email, password, _csrf } = req.body;
     if (!email || !password) {
         return res.status(400).json({ message: `Email${email} and password${password} are required` });
@@ -200,7 +236,11 @@ app.post('/login',rateLimit({windowMs: 15 * 60 * 1000, max: 100 }), async (req, 
                     email: user.email,
                     is_admin: user.is_admin
                 };
-
+		
+		const newCsrfToken = req.csrfToken();
+                req.session.csrfToken = newCsrfToken; // Explicitly store in session
+                console.log('POST /login - New CSRF token after regeneration:', newCsrfToken);
+		    
                 res.json({
                     username: user.username,
                     is_admin: user.is_admin
@@ -288,9 +328,11 @@ const isAdmin = (req, res, next) => {
 };
 
 // Login page
-app.get('/login', (req, res) => {
-    // Generate CSRF token
-    const csrfToken = req.csrfToken ? req.csrfToken() : '';
+app.get('/login',csrfProtection, (req, res) => {
+    // Generate CiSRF token
+    //const csrfToken = req.csrfToken ? req.csrfToken() : '';
+    console.log(`csrfToken in Login: ${req.session.csrfToken}`);
+    const csrfToken = req.session.csrfToken || req.csrfToken();
     if(req.session.user){
         // User is logged in, show logout button
         res.send(`
@@ -302,7 +344,6 @@ app.get('/login', (req, res) => {
                 <title>Login - MyBookShop</title>
                 <link rel="stylesheet" href="/login.css">
             </head>
-            <body>
                 <header>
                     <nav>
                         <div class="icon">
@@ -380,9 +421,9 @@ app.get('/login', (req, res) => {
     }
 });
 
-app.get('/change-password', (req, res) => {
+app.get('/change-password',csrfProtection, (req, res) => {
 
-    const csrfToken = req.csrfToken ? req.csrfToken() : '';
+    const csrfToken = req.csrfToken();
     console.log('GET /change-password - CSRF token:', csrfToken);
 
     res.send(`
@@ -506,6 +547,7 @@ app.post('/change-password', async (req, res) => {
 
 // Add category
 app.post('/add-category', isAdmin, (req, res) => {
+
     const { name } = req.body;
     const sanitizedName = sanitizeInput(name);
     if (!sanitizedName || sanitizedName.length > 255) {
@@ -554,37 +596,120 @@ app.post('/delete-category/:catid', isAdmin, (req, res) => {
 
 
 // Add product with image resizing
-app.post('/add-product', isAdmin, async (req, res) => {
-    upload(req, res, async (err) => {
-        if (err) {
-            return res.send(`Error: ${err}`);
-        }
-        const { name, price, description, author, publisher, catid } = req.body;
-        const sanitizedName = sanitizeInput(name);
-        const sanitizedPrice = sanitizeInput(price);
-        const sanitizedDesc = sanitizeInput(description);
-        const sanitizedAuthor = sanitizeInput(author);
-        const sanitizedPublisher = sanitizeInput(publisher);
-        const sanitizedCatid = sanitizeInput(catid);
+app.post('/add-product', isAdmin, csrfProtection, async (req, res) => {
+    console.log('POST /add-product - req.body:', req.body);
+    console.log('POST /add-product - req.files:', req.files);
+    console.log('POST /add-product - Session CSRF token:', req.session.csrfToken);
+    console.log('POST /add-product - CSRF token from body:', req.body._csrf);
+    console.log('POST /add-product - CSRF token match:', req.session.csrfToken === req.body._csrf);
 
-        if (!sanitizedName || sanitizedName.length > 255 ||
-            !validateNumber(sanitizedPrice) || Number(sanitizedPrice) > 10000 ||
-            (sanitizedDesc && sanitizedDesc.length > 1000) ||
-            !sanitizedAuthor || sanitizedAuthor.length > 255 ||
-            !sanitizedPublisher || sanitizedPublisher.length > 255 ||
-            !validateInteger(sanitizedCatid)) {
-            return res.status(400).send('Invalid product data');
+    const { name, price, description, author, publisher, catid } = req.body;
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedPrice = sanitizeInput(price);
+    const sanitizedDesc = sanitizeInput(description);
+    const sanitizedAuthor = sanitizeInput(author);
+    const sanitizedPublisher = sanitizeInput(publisher);
+    const sanitizedCatid = sanitizeInput(catid);
+
+    if (!sanitizedName || sanitizedName.length > 255 ||
+        !validateNumber(sanitizedPrice) || Number(sanitizedPrice) > 10000 ||
+        (sanitizedDesc && sanitizedDesc.length > 1000) ||
+        !sanitizedAuthor || sanitizedAuthor.length > 255 ||
+        !sanitizedPublisher || sanitizedPublisher.length > 255 ||
+        !validateInteger(sanitizedCatid)) {
+        return res.status(400).send('Invalid product data');
+    }
+
+    // Check if an image was uploaded
+    if (!req.files || !req.files.image) {
+        return res.status(400).send('Error: Image is required');
+    }
+
+    const imageFile = req.files.image;
+    const filetypes = /jpeg|jpg|gif|png/;
+    const extname = filetypes.test(path.extname(imageFile.name).toLowerCase());
+    const mimetype = filetypes.test(imageFile.mimetype);
+    if (!extname || !mimetype) {
+        return res.status(400).send('Only JPG, GIF, or PNG files are allowed');
+    }
+
+    // Generate new filenames for resized and thumbnail images
+    const timestamp = Date.now();
+    const originalPath = path.join(__dirname, 'uploads', `${timestamp}-${imageFile.name}`);
+    const resizedPath = path.join(__dirname, 'uploads', `resized-${timestamp}-${imageFile.name}`);
+    const thumbPath = path.join(__dirname, 'uploads', `thumb-${timestamp}-${imageFile.name}`);
+
+    try {
+        // Save the file to disk using the Buffer from req.files.image.data
+        await fs.promises.writeFile(originalPath, imageFile.data);
+
+        // Resize the image using sharp
+        await sharp(originalPath)
+            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+            .toFile(resizedPath);
+        await sharp(originalPath)
+            .resize(150, 150, { fit: 'cover' })
+            .toFile(thumbPath);
+
+        const image = `/uploads/resized-${timestamp}-${imageFile.name}`;
+        const sql = 'INSERT INTO products (name, price, description, author, publisher, image, catid) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        connection.query(sql, [sanitizedName, sanitizedPrice, sanitizedDesc, sanitizedAuthor, sanitizedPublisher, image, sanitizedCatid], (err) => {
+            if (err) {
+                console.error('Query Error:', err);
+                return res.status(500).send('Database error: ' + err.message);
+            }
+            res.redirect('/admin');
+        });
+    } catch (error) {
+        console.error('Image processing error:', error);
+        return res.status(500).send('Error processing image: ' + error.message);
+    }
+});
+
+// Edit product
+app.post('/edit-product/:pid', isAdmin, csrfProtection, async (req, res) => {
+
+    const pid = sanitizeInput(req.params.pid);
+    const { name, price, description, author, publisher, catid } = req.body;
+    const sanitizedName = sanitizeInput(name);
+    const sanitizedPrice = sanitizeInput(price);
+    const sanitizedDesc = sanitizeInput(description);
+    const sanitizedAuthor = sanitizeInput(author);
+    const sanitizedPublisher = sanitizeInput(publisher);
+    const sanitizedCatid = sanitizeInput(catid);
+
+    if (!validateInteger(pid) ||
+        !sanitizedName || sanitizedName.length > 255 ||
+        !validateNumber(sanitizedPrice) || Number(sanitizedPrice) > 10000 ||
+        (sanitizedDesc && sanitizedDesc.length > 1000) ||
+        !sanitizedAuthor || sanitizedAuthor.length > 255 ||
+        !sanitizedPublisher || sanitizedPublisher.length > 255 ||
+        !validateInteger(sanitizedCatid)) {
+        return res.status(400).send('Invalid product data');
+    }
+
+    let sql = 'UPDATE products SET name = ?, price = ?, description = ?, author = ?, publisher = ?, catid = ?';
+    let values = [sanitizedName, sanitizedPrice, sanitizedDesc, sanitizedAuthor, sanitizedPublisher, sanitizedCatid];
+
+    if (req.files && req.files.image) {
+        const imageFile = req.files.image;
+        const filetypes = /jpeg|jpg|gif|png/;
+        const extname = filetypes.test(path.extname(imageFile.name).toLowerCase());
+        const mimetype = filetypes.test(imageFile.mimetype);
+        if (!extname || !mimetype) {
+            return res.status(400).send('Only JPG, GIF, or PNG files are allowed');
         }
 
-        if (!req.file) {
-            return res.send('Error: Image is required');
-        }
-
-        const originalPath = path.join(__dirname, 'uploads', req.file.filename);
-        const resizedPath = path.join(__dirname, 'uploads', `resized-${req.file.filename}`);
-        const thumbPath = path.join(__dirname, 'uploads', `thumb-${req.file.filename}`);
+        const timestamp = Date.now();
+        const originalPath = path.join(__dirname, 'uploads', `${timestamp}-${imageFile.name}`);
+        const resizedPath = path.join(__dirname, 'uploads', `resized-${timestamp}-${imageFile.name}`);
+        const thumbPath = path.join(__dirname, 'uploads', `thumb-${timestamp}-${imageFile.name}`);
 
         try {
+            // Save the file to disk using the Buffer from req.files.image.data
+            await fs.promises.writeFile(originalPath, imageFile.data);
+
+            // Resize the image using sharp
             await sharp(originalPath)
                 .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
                 .toFile(resizedPath);
@@ -592,80 +717,22 @@ app.post('/add-product', isAdmin, async (req, res) => {
                 .resize(150, 150, { fit: 'cover' })
                 .toFile(thumbPath);
 
-            const image = `/uploads/resized-${req.file.filename}`;
-            const sql = 'INSERT INTO products (name, price, description, author, publisher, image, catid) VALUES (?, ?, ?, ?, ?, ?, ?)';
-            connection.query(sql, [sanitizedName, sanitizedPrice, sanitizedDesc, sanitizedAuthor, sanitizedPublisher, image, sanitizedCatid], (err) => {
-                if (err) {
-                    console.error('Query Error:', err);
-                    return res.send('Database error: ' + err.message);
-                }
-                res.redirect('/admin');
-            });
+            sql += ', image = ?';
+            values.push(`/uploads/resized-${timestamp}-${imageFile.name}`);
         } catch (error) {
             console.error('Image processing error:', error);
-            res.send('Error processing image: ' + error.message);
+            return res.status(500).send('Error processing image: ' + error.message);
         }
-    });
-});
+    }
 
-// Edit product
-app.post('/edit-product/:pid', isAdmin, async (req, res) => {
-    upload(req, res, async (err) => {
+    sql += ' WHERE pid = ?';
+    values.push(pid);
+    connection.query(sql, values, (err) => {
         if (err) {
-            return res.send(`Error: ${err}`);
+            console.error('Query Error:', err);
+            return res.status(500).send('Database error: ' + err.message);
         }
-        const { name, price, description, author, publisher, catid } = req.body;
-        const pid = sanitizeInput(req.params.pid);
-        const sanitizedName = sanitizeInput(name);
-        const sanitizedPrice = sanitizeInput(price);
-        const sanitizedDesc = sanitizeInput(description);
-        const sanitizedAuthor = sanitizeInput(author);
-        const sanitizedPublisher = sanitizeInput(publisher);
-        const sanitizedCatid = sanitizeInput(catid);
-
-        if (!validateInteger(pid) ||
-            !sanitizedName || sanitizedName.length > 255 ||
-            !validateNumber(sanitizedPrice) || Number(sanitizedPrice) > 10000 ||
-            (sanitizedDesc && sanitizedDesc.length > 1000) ||
-            !sanitizedAuthor || sanitizedAuthor.length > 255 ||
-            !sanitizedPublisher || sanitizedPublisher.length > 255 ||
-            !validateInteger(sanitizedCatid)) {
-            return res.status(400).send('Invalid product data');
-        }
-
-        let sql = 'UPDATE products SET name = ?, price = ?, description = ?, author = ?, publisher = ?, catid = ?';
-        let values = [sanitizedName, sanitizedPrice, sanitizedDesc, sanitizedAuthor, sanitizedPublisher, sanitizedCatid];
-
-        if (req.file) {
-            const originalPath = path.join(__dirname, 'uploads', req.file.filename);
-            const resizedPath = path.join(__dirname, 'uploads', `resized-${req.file.filename}`);
-            const thumbPath = path.join(__dirname, 'uploads', `thumb-${req.file.filename}`);
-
-            try {
-                await sharp(originalPath)
-                    .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-                    .toFile(resizedPath);
-                await sharp(originalPath)
-                    .resize(150, 150, { fit: 'cover' })
-                    .toFile(thumbPath);
-
-                sql += ', image = ?';
-                values.push(`/uploads/resized-${req.file.filename}`);
-            } catch (error) {
-                console.error('Image processing error:', error);
-                return res.send('Error processing image: ' + error.message);
-            }
-        }
-
-        sql += ' WHERE pid = ?';
-        values.push(pid);
-        connection.query(sql, values, (err) => {
-            if (err) {
-                console.error('Query Error:', err);
-                return res.send('Database error: ' + err.message);
-            }
-            res.redirect('/admin');
-        });
+        res.redirect('/admin');
     });
 });
 
@@ -701,7 +768,6 @@ try {
     console.error('Failed to start HTTPS server:', err);
     process.exit(1);
 }
-
 function generateAdminPage(categories, products, user) {
     const escapeHtml = (unsafe) => sanitizeHtml(unsafe, { allowedTags: [], allowedAttributes: {} });
     try {
@@ -718,17 +784,16 @@ function generateAdminPage(categories, products, user) {
                 .category-item, .product-item { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
                 .error { color: red; }
             </style>
-            
         </head>
         <body>
             <h1>Admin Panel</h1>
             <h2>By Kwan Chun Kit</h2>
             <p>Logged in as: ${escapeHtml(user.username)} | <button id="logout-button">Logout</button></p>
-            <input type="hidden" name="_csrf" value="${user.csrfToken}">
 
             <div class="section">
                 <h2>Add Category</h2>
                 <form action="/add-category" method="POST" onsubmit="return validateForm(this)">
+                    <input type="hidden" name="_csrf" value="${user.csrfToken}">
                     <label>Name: <input type="text" name="name" required maxlength="255" pattern="[^<>"']+"></label><br>
                     <button type="submit">Add Category</button>
                 </form>
@@ -741,7 +806,7 @@ function generateAdminPage(categories, products, user) {
                         <form action="/edit-category/${escapeHtml(String(cat.catid))}" method="POST" onsubmit="return validateForm(this)">
                             <input type="hidden" name="_csrf" value="${user.csrfToken}">    
                             <label>Name: <input type="text" name="name" value="${escapeHtml(cat.name)}" required maxlength="255" pattern="[^<>"']+"></label>
-                                <button type="submit">Update</button>
+                            <button type="submit">Update</button>
                         </form>
                         <form action="/delete-category/${escapeHtml(String(cat.catid))}" method="POST">
                             <input type="hidden" name="_csrf" value="${user.csrfToken}">
@@ -804,6 +869,6 @@ function generateAdminPage(categories, products, user) {
         `;
     } catch (err) {
         console.error('Error in generateAdminPage:', err);
-        throw err; // Re-throw to be caught by the /admin route
+        throw err;
     }
 }
