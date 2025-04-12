@@ -15,6 +15,10 @@ const csrf = require('csurf');
 var bodyParser = require('body-parser');
 var busboyBodyParser = require('busboy-body-parser');
 
+const dotenv = require('dotenv');
+dotenv.config({ path: './secret.env' }); // Specify the path to secret.env
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 const connection = mysql.createConnection({
     //if mysql.js is now in EC2, change to 'localhost'
     host: 'localhost',
@@ -44,16 +48,6 @@ const upload = multer({
     }
 });
 
-const handleMulterError = (err, req, res, next) => {
-    if (err instanceof multer.MulterError) {
-        console.error('Multer error:', err);
-        return res.status(400).send('File upload error: ' + err.message);
-    } else if (err) {
-        console.error('File upload error:', err);
-        return res.status(400).send('File upload error: ' + err.message);
-    }
-    next();
-};
 
 //if mysql.js is now in EC2, change to 'localhost'
 const MySQLStore = require('express-mysql-session')(session);
@@ -108,10 +102,13 @@ app.use(
     helmet.contentSecurityPolicy({
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'"],
-            imgSrc: ["'self'", "data:"],
+            scriptSrc: ["'self'", "https://js.stripe.com"],
+            connectSrc: ["'self'", "https://api.stripe.com"],
+            frameSrc: ["https://js.stripe.com"], // Allow Stripe iframes
+            styleSrc: ["'self'", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://js.stripe.com", "'unsafe-inline'"], // Allow Stripe styles and inline styles
+            imgSrc: ["'self'", "data:", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://*.stripe.com"], // Allow Stripe images
             objectSrc: ["'none'"],
+            formAction: ["'self'"],
             upgradeInsecureRequests: [],
         }
     })
@@ -476,6 +473,142 @@ app.get('/change-password',csrfProtection, (req, res) => {
         </body>
         </html>
     `);
+});
+
+app.get('/checkout', csrfProtection, (req, res) => {
+    const csrfToken = req.session.csrfToken || req.csrfToken();
+    console.log('GET /change-password - CSRF token:', csrfToken);
+
+
+    // Fetch categories for the navigation bar
+    connection.query('SELECT * FROM categories', (err, categories) => {
+        if (err) {
+            console.error('Error fetching categories:', err);
+            return res.status(500).send('Database error');
+        }
+
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta http-equiv="Content-Security-Policy" content="
+                    script-src 'self' https://js.stripe.com;
+                    connect-src 'self' https://api.stripe.com;
+                    frame-src https://js.stripe.com;
+                    style-src 'self' https://js.stripe.com 'unsafe-inline';
+                    img-src 'self' https://*.stripe.com;
+                ">
+
+                <link rel="stylesheet" href="/checkout.css">
+                <title>Checkout</title>
+                <!-- Include Stripe.js -->
+                <script src="https://js.stripe.com/v3/"></script>
+            </head>
+            <body>
+                <h1>Checkout</h1>
+                <form id="checkout-form">
+                    <div id="checkout-items"></div>
+                    <div id="error-message" class="error"></div>
+                    <button type="submit" id="place-order-btn">Place Order</button>
+                    <!-- Hidden CSRF token (optional, if still needed for other purposes) -->
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                </form>
+                <script src="/checkout.js"></script>
+            </body>
+            </html>
+        `);
+    });
+});
+
+app.get('/success', (req, res) => {
+    // Clear the cart in localStorage (client-side)
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Payment Successful</title>
+        </head>
+        <body>
+            <h1>Payment Successful</h1>
+            <p>Thank you for your purchase!</p>
+            <a href="/">Return to Home</a>
+            <script>
+                // Clear the cart
+                localStorage.removeItem('shoppingCart');
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// Route to create a Stripe Checkout session
+app.post('/create-checkout-session',csrfProtection, async (req, res) => {
+    try {
+        const cartData = req.body.cart; // Cart data sent from the client
+        console.log('Received cart data:', cartData);
+        if (!Array.isArray(cartData) || cartData.length === 0) {
+            return res.status(400).json({ error: 'Cart is empty or invalid' });
+        }
+
+        // Fetch product details from the database
+        const productIds = cartData.map(item => parseInt(item.pid)); // Convert to integer
+        const placeholders = productIds.map(() => '?').join(',');
+        const sql = `SELECT pid, name, price FROM products WHERE pid IN (${placeholders})`;
+
+        connection.query(sql, productIds, (err, results) => {
+            if (err) {
+                console.error('Error fetching products:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+
+            console.log('Fetched products:', results);
+
+            // Map cart items to Stripe line items
+            const lineItems = cartData.map(cartItem => {
+                const pid = parseInt(cartItem.pid); // Convert to integer
+                const product = results.find(p => p.pid === pid);
+                if (!product) return null;
+                return {
+                    price_data: {
+                        currency: 'hkd', // Adjust currency as needed
+                        product_data: {
+                            name: product.name,
+                        },
+                        unit_amount: Math.round(product.price * 100), // Convert to cents
+                    },
+                    quantity: cartItem.quantity,
+                };
+            }).filter(item => item !== null);
+
+            if (lineItems.length === 0) {
+                return res.status(400).json({ error: 'No valid items in cart' });
+            }
+
+            console.log('Stripe line items:', lineItems);
+
+            // Create a Stripe Checkout session
+            stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                line_items: lineItems,
+                mode: 'payment',
+                success_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/success',
+                cancel_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/checkout',
+            }).then(session => {
+                console.log('Stripe session created:', session);
+                res.json({ id: session.id });
+            }).catch(err => {
+                console.error('Error creating Stripe session:', err);
+                res.status(500).json({ error: 'Failed to create checkout session' });
+            });
+        });
+    } catch (err) {
+        console.error('Error in /create-checkout-session:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 app.post('/change-password', async (req, res) => {
