@@ -14,6 +14,7 @@ const session = require('express-session'); // Add express-session
 const csrf = require('csurf');
 var bodyParser = require('body-parser');
 var busboyBodyParser = require('busboy-body-parser');
+var crypto = require('crypto');
 
 const dotenv = require('dotenv');
 dotenv.config({ path: './secret.env' }); // Specify the path to secret.env
@@ -75,6 +76,110 @@ app.use(
         },
     })
 );
+
+//Strip webhook
+app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        const stripeSessionID = session.id;
+        const orderID = session.metadata.orderID;
+
+        if (!orderID) {
+            console.error('OrderID not found in session metadata');
+            return res.status(400).send('OrderID not found');
+        }
+
+        const checkTransactionSql = 'SELECT * FROM transactions WHERE stripeSessionID = ?';
+        connection.query(checkTransactionSql, [stripeSessionID], (err, results) => {
+            if (err) {
+                console.error('Error checking transaction:', err);
+                return res.status(500).send('Database error');
+            }
+
+            if (results.length > 0) {
+                console.log(`Transaction for Stripe session ${stripeSessionID} already processed`);
+                return res.status(200).send('Transaction already processed');
+            }
+
+            const getOrderSql = 'SELECT * FROM orders WHERE orderID = ?';
+            connection.query(getOrderSql, [orderID], (err, orders) => {
+                if (err) {
+                    console.error('Error fetching order:', err);
+                    return res.status(500).send('Database error');
+                }
+
+                if (orders.length === 0) {
+                    console.error(`Order not found for orderID ${orderID}`);
+                    return res.status(404).send('Order not found');
+                }
+
+                const order = orders[0];
+                const cartItems = JSON.parse(order.cartItems);
+                const totalPrice = order.totalPrice;
+                const currency = order.currency;
+                const storedDigest = order.digest;
+                const salt = order.salt; // Retrieve the stored salt
+
+                const merchantEmail = 'merchant@example.com';
+                const digestComponents = [
+                    currency,
+                    merchantEmail,
+                    salt,
+                    ...cartItems.map(item => `${item.pid}:${item.quantity}:${item.price}`),
+                    totalPrice.toFixed(2)
+                ];
+                const digestString = digestComponents.join('|');
+                console.log('Regenerated digest components:', digestString);
+
+                const regeneratedDigest = crypto.createHash('sha256').update(digestString).digest('hex');
+                console.log('Regenerated digest:', regeneratedDigest);
+
+                if (regeneratedDigest !== storedDigest) {
+                    console.error('Digest validation failed');
+                    return res.status(400).send('Digest validation failed');
+                }
+
+                const insertTransactionSql = `
+                    INSERT INTO transactions (orderID, stripeSessionID, totalPrice, currency, cartItems, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `;
+                const transactionValues = [
+                    orderID,
+                    stripeSessionID,
+                    totalPrice,
+                    currency,
+                    JSON.stringify(cartItems),
+                    'completed'
+                ];
+
+                connection.query(insertTransactionSql, transactionValues, (err, result) => {
+                    if (err) {
+                        console.error('Error saving transaction:', err);
+                        return res.status(500).send('Database error');
+                    }
+
+                    console.log('Transaction saved:', result.insertId);
+                    res.status(200).send('Webhook processed successfully');
+                });
+            });
+        });
+    } else {
+        res.status(200).send('Event type not handled');
+    }
+});
+
 app.use(cors({
     origin: 'https://s13.ierg4210.ie.cuhk.edu.hk', // Allow requests from this origin
     credentials: true // Allow cookies to be sent
@@ -150,17 +255,59 @@ app.get('/admin',csrfProtection, (req, res) => {
             </html>
         `);
     }
+    // Fetch categories
     connection.query('SELECT * FROM categories', (err, categories) => {
-        if (err) throw err;
+        if (err) {
+            console.error('Error fetching categories:', err);
+            return res.status(500).send('Database error');
+        }
+
+        // Fetch products
         connection.query('SELECT * FROM products', (err, products) => {
-            if (err) throw err;
-            // Use the existing CSRF token from the session, or generate a new one if missing
-            const csrfToken = req.session.csrfToken;
-            const userWithCsrf = {
-                ...req.session.user,
-                csrfToken: csrfToken
-            };
-            res.send(generateAdminPage(categories, products,userWithCsrf));
+            if (err) {
+                console.error('Error fetching products:', err);
+                return res.status(500).send('Database error');
+            }
+
+            // Fetch orders
+            connection.query('SELECT * FROM orders', (err, orders) => {
+                if (err) {
+                    console.error('Error fetching orders:', err);
+                    return res.status(500).send('Database error');
+                }
+
+                // Fetch transactions
+                connection.query('SELECT * FROM transactions', (err, transactions) => {
+                    if (err) {
+                        console.error('Error fetching transactions:', err);
+                        return res.status(500).send('Database error');
+                    }
+
+                    // Merge orders with transaction data
+                    const ordersWithTransactions = orders.map(order => {
+                        const transaction = transactions.find(t => t.orderID === order.orderID);
+                        return {
+                            orderID: order.orderID,
+                            username: order.username,
+                            cartItems: JSON.parse(order.cartItems),
+                            currency: order.currency,
+                            totalPrice: order.totalPrice,
+                            orderCreatedAt: order.createdAt,
+                            transactionID: transaction ? transaction.transactionID : null,
+                            status: transaction ? transaction.status : null,
+                            transactionCreatedAt: transaction ? transaction.createdAt : null
+                        };
+                    });
+
+                    // Use the existing CSRF token from the session, or generate a new one if missing
+                    const csrfToken = req.session.csrfToken;
+                    const userWithCsrf = {
+                        ...req.session.user,
+                        csrfToken: csrfToken
+                    };
+                    res.send(generateAdminPage(categories, products,userWithCsrf, ordersWithTransactions));
+                });
+            });
         });
     });
 });
@@ -324,15 +471,15 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-// Login page
-app.get('/login',csrfProtection, (req, res) => {
-    // Generate CiSRF token
-    //const csrfToken = req.csrfToken ? req.csrfToken() : '';
-    console.log(`csrfToken in Login: ${req.session.csrfToken}`);
-    const csrfToken = req.session.csrfToken || req.csrfToken();
-    if(req.session.user){
-        // User is logged in, show logout button
-        res.send(`
+function generateLoginPage(csrfToken, user, orders = []) {
+    const escapeHtml = (unsafe) => unsafe.replace(/[&<>"']/g, (char) => {
+        const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return escapeMap[char] || char;
+    });
+
+    if (user) {
+        // Logged-in view with order history
+        return `
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -340,7 +487,13 @@ app.get('/login',csrfProtection, (req, res) => {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Login - MyBookShop</title>
                 <link rel="stylesheet" href="/login.css">
+                <style>
+                    .order-history { margin: 20px 0; }
+                    .order-item { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
+                    .product-list { margin-left: 20px; }
+                </style>
             </head>
+            <body>
                 <header>
                     <nav>
                         <div class="icon">
@@ -357,64 +510,191 @@ app.get('/login',csrfProtection, (req, res) => {
                 </header>
 
                 <div class="logout-container">
-                    <h2>You are logged in as ${req.session.user.username}</h2>
-                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                    <h2>You are logged in as ${escapeHtml(user.username)}</h2>
+                    <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
                     <button id="logout-button-main">Logout</button>
+                </div>
+
+                <div class="order-history">
+                    <h3>Your Recent Orders (Last 5)</h3>
+                    ${orders.length === 0 ? '<p>No recent orders found.</p>' : orders.map(order => `
+                        <div class="order-item">
+                            <p><strong>Order ID:</strong> ${escapeHtml(String(order.orderID))}</p>
+                            <p><strong>Cart Items:</strong></p>
+                            <div class="product-list">
+                                ${(order.cartItems && order.cartItems.length > 0) ? order.cartItems.map(item => `
+                                    <p>
+                                        Product Name: ${escapeHtml(item.name)} | 
+                                        Quantity: ${escapeHtml(String(item.quantity))} | 
+                                        Price: $${escapeHtml(String(item.price.toFixed(2)))}
+                                    </p>
+                                `).join('') : '<p>No items</p>'}
+                            </div>
+                            <p><strong>Currency:</strong> ${escapeHtml(order.currency)}</p>
+                            <p><strong>Total Price:</strong> $${escapeHtml(String(order.totalPrice.toFixed(2)))}</p>
+                            <p><strong>Status:</strong> ${order.status ? escapeHtml(order.status) : 'Pending'}</p>
+                            <p><strong>Order Date:</strong> ${escapeHtml(new Date(order.orderCreatedAt).toLocaleString())}</p>
+                        </div>
+                    `).join('')}
                 </div>
 
                 <script src="/login.js"></script>
             </body>
             </html>
-        `);
+        `;
+    } else {
+        // Logged-out view
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Login - MyBookShop</title>
+                <link rel="stylesheet" href="/login.css">
+            </head>
+            <body>
+                <header>
+                    <nav>
+                        <div class="icon">
+                            <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                        </div>
+                        <div class="navbar-list">
+                            <ul>
+                                <li><a href="/">Home</a></li>
+                                <li><a href="#">About Us</a></li>
+                                <li><a href="/login">Login</a></li>
+                            </ul>
+                        </div>
+                    </nav>
+                </header>
+
+                <div class="login-container">
+                    <h2>Login to MyBookShop</h2>
+                    <form id="login-form">
+                        <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
+                        <div class="form-group">
+                            <label for="email">Email:</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password:</label>
+                            <input type="password" id="password" name="password" required>
+                        </div>
+                        <button type="submit">Login</button>
+                        <a href="/change-password">Change Password</a>
+                    </form>
+                    <p id="error-message" style="color: red; display: none;"></p>
+                </div>
+
+                <script src="/login.js"></script>
+            </body>
+            </html>
+        `;
+    }
+}
+
+// Login page
+app.get('/login',csrfProtection, (req, res) => {
+    // Generate CiSRF token
+    //const csrfToken = req.csrfToken ? req.csrfToken() : '';
+    console.log(`csrfToken in Login: ${req.session.csrfToken}`);
+    const csrfToken = req.session.csrfToken || req.csrfToken();
+    if(req.session.user){
+        // Step 1: Fetch the user's most recent 5 orders with transaction status
+        const query = `
+            SELECT 
+                o.orderID,
+                o.username,
+                o.cartItems,
+                o.currency,
+                o.totalPrice,
+                o.createdAt AS orderCreatedAt,
+                t.transactionID,
+                t.status,
+                t.createdAt AS transactionCreatedAt
+            FROM orders o
+            LEFT JOIN transactions t ON o.orderID = t.orderID
+            WHERE o.username = ?
+            ORDER BY o.createdAt DESC
+            LIMIT 5
+        `;
+        connection.query(query, [req.session.user.username], (err, ordersWithTransactions) => {
+            if (err) {
+                console.error('Error fetching orders for user:', err);
+                return res.status(500).send('Database error');
+            }
+
+            // Step 2: Extract all unique product IDs from cartItems across all orders
+            const allProductIds = new Set();
+            ordersWithTransactions.forEach(order => {
+                const cartItems = JSON.parse(order.cartItems || '[]');
+                cartItems.forEach(item => {
+                    if (item.pid) {
+                        allProductIds.add(item.pid);
+                    }
+                });
+            });
+
+            // Step 3: Fetch product names for all product IDs
+            if (allProductIds.size > 0) {
+                const productQuery = `SELECT pid, name FROM products WHERE pid IN (${Array.from(allProductIds).map(() => '?').join(',')})`;
+                connection.query(productQuery, Array.from(allProductIds), (err, products) => {
+                    if (err) {
+                        console.error('Error fetching product names:', err);
+                        return res.status(500).send('Database error');
+                    }
+
+                    // Create a map of pid to product name
+                    const productMap = new Map(products.map(product => [product.pid, product.name]));
+
+                    // Step 4: Process orders and replace pid with product name in cartItems
+                    const processedOrders = ordersWithTransactions.map(order => {
+                        const cartItems = JSON.parse(order.cartItems || '[]').map(item => ({
+                            name: productMap.get(item.pid) || 'Unknown Product',
+                            quantity: item.quantity,
+                            price: item.price
+                        }));
+                        return {
+                            orderID: order.orderID,
+                            username: order.username,
+                            cartItems: cartItems,
+                            currency: order.currency,
+                            totalPrice: order.totalPrice,
+                            orderCreatedAt: order.orderCreatedAt,
+                            transactionID: order.transactionID,
+                            status: order.status,
+                            transactionCreatedAt: order.transactionCreatedAt
+                        };
+                    });
+
+                    // Step 5: Render the page using generateLoginPage
+                    const html = generateLoginPage(csrfToken, req.session.user, processedOrders);
+                    res.send(html);
+                });
+            } else {
+                // If there are no product IDs (empty orders), render without product names
+                const processedOrders = ordersWithTransactions.map(order => ({
+                    orderID: order.orderID,
+                    username: order.username,
+                    cartItems: [],
+                    currency: order.currency,
+                    totalPrice: order.totalPrice,
+                    orderCreatedAt: order.orderCreatedAt,
+                    transactionID: order.transactionID,
+                    status: order.status,
+                    transactionCreatedAt: order.transactionCreatedAt
+                }));
+
+                const html = generateLoginPage(csrfToken, req.session.user, processedOrders);
+                res.send(html);
+            }
+        });
     }
     else{
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Login - MyBookShop</title>
-            <link rel="stylesheet" href="/login.css">
-        </head>
-        <body>
-            <header>
-                <nav>
-                    <div class="icon">
-                        <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
-                    </div>
-                    <div class="navbar-list">
-                        <ul>
-                            <li><a href="/">Home</a></li>
-                            <li><a href="#">About Us</a></li>
-                            <li><a href="/login">Login</a></li>
-                        </ul>
-                    </div>
-                </nav>
-            </header>
-
-            <div class="login-container">
-                <h2>Login to MyBookShop</h2>
-                <form id="login-form">
-                    <input type="hidden" name="_csrf" value="${csrfToken}">
-                    <div class="form-group">
-                        <label for="email">Email:</label>
-                        <input type="email" id="email" name="email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password:</label>
-                        <input type="password" id="password" name="password" required>
-                    </div>
-                    <button type="submit">Login</button>
-                    <a href="/change-password">Change Password</a>
-                </form>
-                <p id="error-message" style="color: red; display: none;"></p>
-            </div>
-
-            <script src="/login.js"></script>
-        </body>
-        </html>
-    `);
+        // Render the logged-out view using generateLoginPage
+        const html = generateLoginPage(csrfToken, null);
+        res.send(html);
     }
 });
 
@@ -558,7 +838,7 @@ app.post('/create-checkout-session',csrfProtection, async (req, res) => {
         const productIds = cartData.map(item => parseInt(item.pid)); // Convert to integer
         const placeholders = productIds.map(() => '?').join(',');
         const sql = `SELECT pid, name, price FROM products WHERE pid IN (${placeholders})`;
-
+        
         connection.query(sql, productIds, (err, results) => {
             if (err) {
                 console.error('Error fetching products:', err);
@@ -567,47 +847,125 @@ app.post('/create-checkout-session',csrfProtection, async (req, res) => {
 
             console.log('Fetched products:', results);
 
-            // Map cart items to Stripe line items
-            const lineItems = cartData.map(cartItem => {
-                const pid = parseInt(cartItem.pid); // Convert to integer
+            // Validate quantities and map cart items
+            const validatedCartItems = cartData.map(cartItem => {
+                const pid = parseInt(cartItem.pid);
+                const quantity = parseInt(cartItem.quantity);
+
+                // Ensure quantity is a positive number
+                if (!Number.isInteger(quantity) || quantity <= 0) {
+                    console.warn(`Invalid quantity for pid ${pid}: ${quantity}`);
+                    return null;
+                }
+
                 const product = results.find(p => p.pid === pid);
-                if (!product) return null;
+                if (!product) {
+                    console.warn(`Product not found for pid ${pid}`);
+                    return null;
+                }
+
                 return {
-                    price_data: {
-                        currency: 'hkd', // Adjust currency as needed
-                        product_data: {
-                            name: product.name,
-                        },
-                        unit_amount: Math.round(product.price * 100), // Convert to cents
-                    },
-                    quantity: cartItem.quantity,
+                    pid: pid,
+                    quantity: quantity,
+                    price: parseFloat(product.price)
                 };
             }).filter(item => item !== null);
 
-            if (lineItems.length === 0) {
+            if (validatedCartItems.length === 0) {
+                console.error('No valid items in cart after validation');
                 return res.status(400).json({ error: 'No valid items in cart' });
             }
 
-            console.log('Stripe line items:', lineItems);
+            // Calculate total price
+            const totalPrice = validatedCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            console.log('Total price:', totalPrice);
 
-            // Create a Stripe Checkout session
-            stripe.checkout.sessions.create({
-                payment_method_types: ['card'],
-                line_items: lineItems,
-                mode: 'payment',
-                success_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/success',
-                cancel_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/checkout',
-            }).then(session => {
-                console.log('Stripe session created:', session);
-                res.json({ id: session.id });
-            }).catch(err => {
-                console.error('Error creating Stripe session:', err);
-                res.status(500).json({ error: 'Failed to create checkout session' });
+            // Generate digest
+            const currency = 'hkd'; // From your previous setup
+            const merchantEmail = 'merchant@example.com'; // Replace with your merchant email
+            const salt = crypto.randomBytes(16).toString('hex'); // Random salt
+
+            // Prepare digest components with delimiter '|'
+            const digestComponents = [
+                currency,
+                merchantEmail,
+                salt,
+                ...validatedCartItems.map(item => `${item.pid}:${item.quantity}:${item.price}`),
+                totalPrice.toFixed(2)
+            ];
+            const digestString = digestComponents.join('|');
+            console.log('Digest components:', digestString);
+
+            // Generate SHA-256 hash
+            const digest = crypto.createHash('sha256').update(digestString).digest('hex');
+            console.log('Generated digest:', digest);
+
+            // Get username (or 'guest' if not logged in)
+            const username = req.session.user ? req.session.user.username : 'guest';
+            console.log('Username:', username);
+
+            // Store order in the database
+            const orderSql = `
+                INSERT INTO orders (username, cartItems, currency, totalPrice, digest, salt)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `;
+            const orderValues = [
+                username,
+                JSON.stringify(validatedCartItems), // Store cart items as JSON
+                currency,
+                totalPrice,
+                digest,
+                salt
+            ];
+
+            //Insert data to "orders" Database and Pass data to Stripe
+            connection.query(orderSql, orderValues, (err, result) => {
+                if (err) {
+                    console.error('Error inserting order:', err);
+                    return res.status(500).json({ error: 'Failed to store order' });
+                }
+
+                const orderID = result.insertId;
+                console.log('Inserted orderID:', orderID);
+
+                // Create Stripe Checkout session
+                const lineItems = validatedCartItems.map(item => ({
+                    price_data: {
+                        currency: currency,
+                        product_data: {
+                            name: results.find(p => p.pid === item.pid).name,
+                        },
+                        unit_amount: Math.round(item.price * 100),
+                    },
+                    quantity: item.quantity,
+                }));
+
+                stripe.checkout.sessions.create({
+                    payment_method_types: ['card'],
+                    line_items: lineItems,
+                    mode: 'payment',
+                    success_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/success',
+                    cancel_url: 'https://s13.ierg4210.ie.cuhk.edu.hk/checkout',
+                    metadata: {
+                        orderID: orderID.toString() // Include orderID in metadata
+                    }
+                }).then(session => {
+                    console.log('Stripe session created:', session);
+                    // Return session ID, orderID, and digest
+                    res.json({
+                        id: session.id,
+                        orderID: orderID,
+                        digest: digest
+                    });
+                }).catch(err => {
+                    console.error('Error creating Stripe session:', err.message);
+                    res.status(500).json({ error: 'Failed to create checkout session: ' + err.message });
+                });
             });
         });
     } catch (err) {
         console.error('Error in /create-checkout-session:', err);
-        res.status(500).json({ error: 'Server error' });
+        res.status(500).json({ error: 'Server error: ' + err.message });
     }
 });
 
@@ -901,7 +1259,7 @@ try {
     console.error('Failed to start HTTPS server:', err);
     process.exit(1);
 }
-function generateAdminPage(categories, products, user) {
+function generateAdminPage(categories, products, user, ordersWithTransactions) {
     const escapeHtml = (unsafe) => sanitizeHtml(unsafe, { allowedTags: [], allowedAttributes: {} });
     try {
         console.log('Generating admin page for user:', user);
@@ -922,6 +1280,32 @@ function generateAdminPage(categories, products, user) {
             <h1>Admin Panel</h1>
             <h2>By Kwan Chun Kit</h2>
             <p>Logged in as: ${escapeHtml(user.username)} | <button id="logout-button">Logout</button></p>
+
+            <div class="section">
+                <h2>Manage Orders</h2>
+                ${ordersWithTransactions.length === 0 ? '<p>No orders found.</p>' : ordersWithTransactions.map(order => `
+                    <div class="order-item">
+                        <p><strong>Order ID:</strong> ${escapeHtml(String(order.orderID))}</p>
+                        <p><strong>Transaction ID:</strong> ${order.transactionID ? escapeHtml(String(order.transactionID)) : 'N/A'}</p>
+                        <p><strong>Username:</strong> ${escapeHtml(order.username)}</p>
+                        <p><strong>Cart Items:</strong></p>
+                        <div class="product-list">
+                            ${order.cartItems.map(item => `
+                                <p>
+                                    Product ID: ${escapeHtml(String(item.pid))} | 
+                                    Quantity: ${escapeHtml(String(item.quantity))} | 
+                                    Price: $${escapeHtml(String(item.price.toFixed(2)))}
+                                </p>
+                            `).join('')}
+                        </div>
+                        <p><strong>Currency:</strong> ${escapeHtml(order.currency)}</p>
+                        <p><strong>Total Price:</strong> $${escapeHtml(String(order.totalPrice.toFixed(2)))}</p>
+                        <p><strong>Status:</strong> ${order.status ? escapeHtml(order.status) : 'Pending'}</p>
+                        <p><strong>Order Created At:</strong> ${escapeHtml(new Date(order.orderCreatedAt).toLocaleString())}</p>
+                        ${order.transactionCreatedAt ? `<p><strong>Transaction Created At:</strong> ${escapeHtml(new Date(order.transactionCreatedAt).toLocaleString())}</p>` : ''}
+                    </div>
+                `).join('')}
+            </div>
 
             <div class="section">
                 <h2>Add Category</h2>

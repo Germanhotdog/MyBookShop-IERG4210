@@ -137,6 +137,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error('Invalid session ID received from server');
             }
 
+            // Add hidden fields for orderID and digest
+            const orderIDInput = document.createElement('input');
+            orderIDInput.type = 'hidden';
+            orderIDInput.name = 'invoice';
+            orderIDInput.value = session.orderID;
+            checkoutForm.appendChild(orderIDInput);
+
+            const digestInput = document.createElement('input');
+            digestInput.type = 'hidden';
+            digestInput.name = 'custom';
+            digestInput.value = session.digest;
+            checkoutForm.appendChild(digestInput);
+
+            localStorage.removeItem('shoppingCart');
+
             // Redirect to Stripe Checkout
             const result = await stripe.redirectToCheckout({
                 sessionId: session.id

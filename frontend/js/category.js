@@ -143,6 +143,9 @@ function escapeHtml(unsafe) {
     }
   
     const cart = new Cart();
+    // Display username from localStorage
+    const username = localStorage.getItem('username') || 'guest';
+    document.getElementById('username').textContent = username;
   
     // Get catid from URL query parameter
     const urlParams = new URLSearchParams(window.location.search);
