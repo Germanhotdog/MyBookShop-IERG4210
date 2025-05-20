@@ -15,6 +15,7 @@ const csrf = require('csurf');
 var bodyParser = require('body-parser');
 var busboyBodyParser = require('busboy-body-parser');
 var crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const dotenv = require('dotenv');
 dotenv.config({ path: './secret.env' }); // Specify the path to secret.env
@@ -209,15 +210,20 @@ app.use(
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "https://js.stripe.com"],
             connectSrc: ["'self'", "https://api.stripe.com"],
-            frameSrc: ["https://js.stripe.com"], // Allow Stripe iframes
-            styleSrc: ["'self'", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://js.stripe.com", "'unsafe-inline'"], // Allow Stripe styles and inline styles
-            imgSrc: ["'self'", "data:", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://*.stripe.com"], // Allow Stripe images
+            frameSrc: ["https://js.stripe.com"], 
+            styleSrc: ["'self'", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://js.stripe.com", "'unsafe-inline'"], 
+            imgSrc: ["'self'", "data:", "https://s13.ierg4210.ie.cuhk.edu.hk", "https://*.stripe.com"], 
             objectSrc: ["'none'"],
             formAction: ["'self'"],
             upgradeInsecureRequests: [],
         }
     })
 );
+
+app.use(helmet.frameguard({ action: 'deny' })); // Sets X-Frame-Options: DENY
+app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true })); // Sets Strict-Transport-Security
+app.use(helmet.noSniff()); // Sets X-Content-Type-Options: nosniff
+app.use(helmet.referrerPolicy({ policy: 'strict-origin-when-cross-origin' })); // Sets Referrer-Policy
 
 // Configure csurf middleware
 const csrfProtection = csrf({ cookie: false });
@@ -310,6 +316,65 @@ app.get('/admin',csrfProtection, (req, res) => {
             });
         });
     });
+});
+
+// Register page (GET)
+app.get('/register', csrfProtection, (req, res) => {
+    const csrfToken = req.csrfToken();
+    console.log(`csrfToken in Register: ${csrfToken}`);
+    
+    // Render the register page with the CSRF token
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Register - MyBookShop</title>
+            <link rel="stylesheet" href="/login.css">
+        </head>
+        <body>
+            <header>
+                <nav>
+                    <div class="icon">
+                        <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                    </div>
+                    <div class="navbar-list">
+                        <ul>
+                            <li><a href="/">Home</a></li>
+                            <li><a href="#">About Us</a></li>
+                            <li><a href="/login">Login</a></li>
+                        </ul>
+                    </div>
+                </nav>
+            </header>
+
+            <div class="register-container">
+                <h2>Register for MyBookShop</h2>
+                <form id="register-form" action="/register" method="POST">
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" name="email" required maxlength="255">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required minlength="8">
+                    </div>
+                    <button type="submit">Register</button>
+                    <p>Already have an account? <a href="/login">Login here</a></p>
+                </form>
+                <p id="error-message" style="color: red; display: none;"></p>
+            </div>
+
+            <script src="/register.js"></script>
+        </body>
+        </html>
+    `);
 });
 
 //register
@@ -513,6 +578,9 @@ function generateLoginPage(csrfToken, user, orders = []) {
                     <h2>You are logged in as ${escapeHtml(user.username)}</h2>
                     <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
                     <button id="logout-button-main">Logout</button>
+                    <button type="button" id="reset-password-button">Reset Password</button>
+                    <button type="button" id="login-button">Login</button>
+                    <button type="button" id="register-button">Register</button>
                 </div>
 
                 <div class="order-history">
@@ -582,7 +650,8 @@ function generateLoginPage(csrfToken, user, orders = []) {
                             <input type="password" id="password" name="password" required>
                         </div>
                         <button type="submit">Login</button>
-                        <a href="/change-password">Change Password</a>
+                        <a href="/register">Register</a>
+                        <a href="/recover-password">Recover Password</a>
                     </form>
                     <p id="error-message" style="color: red; display: none;"></p>
                 </div>
@@ -599,8 +668,11 @@ app.get('/login',csrfProtection, (req, res) => {
     // Generate CiSRF token
     //const csrfToken = req.csrfToken ? req.csrfToken() : '';
     console.log(`csrfToken in Login: ${req.session.csrfToken}`);
+
+    const forceLoginView = req.query.view === 'login';
+
     const csrfToken = req.session.csrfToken || req.csrfToken();
-    if(req.session.user){
+    if(req.session.user && !forceLoginView){
         // Step 1: Fetch the user's most recent 5 orders with transaction status
         const query = `
             SELECT 
@@ -754,6 +826,73 @@ app.get('/change-password',csrfProtection, (req, res) => {
         </html>
     `);
 });
+
+app.post('/change-password', async (req, res) => {
+    // Check if the user is logged in
+    if (!req.session.user) {
+        return res.status(401).json({ message: 'You must be logged in to change your password' });
+    }
+
+    const { currentPassword, newPassword, confirmPassword, _csrf } = req.body;
+
+    // Validate input
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+        return res.status(400).json({ message: 'New password and confirmation do not match' });
+    }
+
+    if (newPassword.length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters long' });
+    }
+
+    try {
+        // Fetch the user from the database
+        const [user] = await new Promise((resolve, reject) => {
+            connection.query('SELECT * FROM user WHERE id = ?', [req.session.user.id], (err, results) => {
+                if (err) return reject(err);
+                resolve(results);
+            });
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Validate the current password
+        const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ message: 'Current password is incorrect' });
+        }
+
+        // Hash the new password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update the password in the database
+        await new Promise((resolve, reject) => {
+            connection.query('UPDATE user SET password = ? WHERE id = ?', [hashedNewPassword, req.session.user.id], (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+
+        // Destroy the session to log out the user
+        req.session.destroy((err) => {
+            if (err) {
+                console.error('Session destruction error:', err);
+                return res.status(500).json({ message: 'Failed to log out after password change' });
+            }
+
+            res.clearCookie('auth_token');
+            res.json({ message: 'Password changed successfully. You have been logged out.' });
+            });
+        } catch (err) {
+            console.error('Change password error:', err);
+            res.status(500).json({ message: 'Server error' });
+        }
+    });
 
 app.get('/checkout', csrfProtection, (req, res) => {
     const csrfToken = req.session.csrfToken || req.csrfToken();
@@ -969,72 +1108,303 @@ app.post('/create-checkout-session',csrfProtection, async (req, res) => {
     }
 });
 
-app.post('/change-password', async (req, res) => {
-    // Check if the user is logged in
-    if (!req.session.user) {
-        return res.status(401).json({ message: 'You must be logged in to change your password' });
-    }
-
-    const { currentPassword, newPassword, confirmPassword, _csrf } = req.body;
-
-    // Validate input
-    if (!currentPassword || !newPassword || !confirmPassword) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    if (newPassword !== confirmPassword) {
-        return res.status(400).json({ message: 'New password and confirmation do not match' });
-    }
-
-    if (newPassword.length < 8) {
-        return res.status(400).json({ message: 'New password must be at least 8 characters long' });
-    }
-
-    try {
-        // Fetch the user from the database
-        const [user] = await new Promise((resolve, reject) => {
-            connection.query('SELECT * FROM user WHERE id = ?', [req.session.user.id], (err, results) => {
-                if (err) return reject(err);
-                resolve(results);
-            });
-        });
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Validate the current password
-        const passwordMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!passwordMatch) {
-            return res.status(401).json({ message: 'Current password is incorrect' });
-        }
-
-        // Hash the new password
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
-        // Update the password in the database
-        await new Promise((resolve, reject) => {
-            connection.query('UPDATE user SET password = ? WHERE id = ?', [hashedNewPassword, req.session.user.id], (err) => {
-                if (err) return reject(err);
-                resolve();
-            });
-        });
-
-        // Destroy the session to log out the user
-        req.session.destroy((err) => {
-            if (err) {
-                console.error('Session destruction error:', err);
-                return res.status(500).json({ message: 'Failed to log out after password change' });
-            }
-
-            res.clearCookie('auth_token');
-            res.json({ message: 'Password changed successfully. You have been logged out.' });
-        });
-    } catch (err) {
-        console.error('Change password error:', err);
-        res.status(500).json({ message: 'Server error' });
+// Configure Nodemailer (replace with your email service credentials)
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'jackyjai1026@gmail.com', 
+        pass: 'otvnirogsyvjtler'     
     }
 });
+
+// Utility function to generate a random nonce
+function generateNonce() {
+    return crypto.randomBytes(32).toString('hex'); // 64-character hex string
+}
+
+// GET /recover-password - Display password recovery form
+app.get('/recover-password', csrfProtection, (req, res) => {
+    const csrfToken = req.csrfToken();
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Recover Password - MyBookShop</title>
+            <link rel="stylesheet" href="/login.css">
+        </head>
+        <body>
+            <header>
+                <nav>
+                    <div class="icon">
+                        <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                    </div>
+                    <div class="navbar-list">
+                        <ul>
+                            <li><a href="/">Home</a></li>
+                            <li><a href="#">About Us</a></li>
+                            <li><a href="/login">Login</a></li>
+                        </ul>
+                    </div>
+                </nav>
+            </header>
+
+            <div class="recover-password-container">
+                <h2>Recover Your Password</h2>
+                <form id="recover-password-form" method="POST" action="/recover-password">
+                    <input type="hidden" name="_csrf" value="${csrfToken}">
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <button type="submit">Request Password Reset</button>
+                    <p>Remembered your password? <a href="/login">Login here</a></p>
+                </form>
+                <p id="recover-error-message" style="color: red; display: none;"></p>
+                <p id="recover-success-message" style="color: green; display: none;"></p>
+            </div>
+
+            <script src="/login.js"></script>
+        </body>
+        </html>
+    `);
+});
+
+// POST /recover-password - Handle password recovery request
+app.post('/recover-password', csrfProtection, (req, res) => {
+    const { email } = req.body;
+
+    // Step 1: Validate email input
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: 'Please enter a valid email address' });
+    }
+
+    // Step 2: Check if the email exists in the user table
+    const checkUserSql = 'SELECT * FROM user WHERE email = ?';
+    connection.query(checkUserSql, [email], (err, users) => {
+        if (err) {
+            console.error('Error checking user:', err);
+            return res.status(500).json({ message: 'Database error' });
+        }
+
+        // Step 3: Always return a generic success message for security (don't reveal if email exists)
+        // But only proceed with email sending if the user exists
+        if (users.length > 0) {
+            // Step 4: Generate a nonce and set expiration (1 hour from now)
+            const nonce = generateNonce();
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+            // Step 5: Store the nonce in the password_reset_tokens table
+            const insertTokenSql = 'INSERT INTO password_reset_tokens (email, nonce, expires_at) VALUES (?, ?, ?)';
+            connection.query(insertTokenSql, [email, nonce, expiresAt], (err) => {
+                if (err) {
+                    console.error('Error storing reset token:', err);
+                    return res.status(500).json({ message: 'Database error' });
+                }
+
+                // Step 6: Send the recovery email
+                const resetLink = `https://s13.ierg4210.ie.cuhk.edu.hk/reset-password/${nonce}`;
+                const mailOptions = {
+                    from: 'jackyjai1026@gmail.com',
+                    to: email,
+                    subject: 'MyBookShop Password Recovery Request',
+                    html: `
+                        <h2>Password Recovery Request</h2>
+                        <p>You have requested to recover your password for MyBookShop.</p>
+                        <p>Please click the link below to reset your password (valid for 1 hour):</p>
+                        <p><a href="${resetLink}">${resetLink}</a></p>
+                        <p>If you did not request this, please ignore this email or contact support.</p>
+                    `
+                };
+
+                transporter.sendMail(mailOptions, (error, info) => {
+                    if (error) {
+                        console.error('Error sending email:', error);
+                        return res.status(500).json({ message: 'Error sending email' });
+                    }
+
+                    console.log('Password recovery email sent:', info.response);
+                    res.json({ message: 'If an account exists with that email, a password reset link has been sent.' });
+                });
+            });
+        } else {
+            // Even if the email doesn't exist, return the same message for security
+            res.json({ message: 'If an account exists with that email, a password reset link has been sent.' });
+        }
+    });
+});
+
+// GET /reset-password/:nonce - Display password reset form
+app.get('/reset-password/:nonce', csrfProtection, (req, res) => {
+    const { nonce } = req.params;
+    const currentTime = new Date();
+
+    // Step 1: Validate the nonce
+    const checkTokenSql = 'SELECT * FROM password_reset_tokens WHERE nonce = ? AND expires_at > ? AND used = FALSE';
+    connection.query(checkTokenSql, [nonce, currentTime], (err, tokens) => {
+        if (err) {
+            console.error('Error checking reset token:', err);
+            return res.status(500).send('Database error');
+        }
+
+        if (tokens.length === 0) {
+            return res.status(400).send(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Invalid Reset Link - MyBookShop</title>
+                    <link rel="stylesheet" href="/login.css">
+                </head>
+                <body>
+                    <header>
+                        <nav>
+                            <div class="icon">
+                                <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                            </div>
+                            <div class="navbar-list">
+                                <ul>
+                                    <li><a href="/">Home</a></li>
+                                    <li><a href="#">About Us</a></li>
+                                    <li><a href="/logout">Logout</a></li>
+                                </ul>
+                            </div>
+                        </nav>
+                    </header>
+                    <div class="reset-password-container">
+                        <h2>Invalid or Expired Link</h2>
+                        <p>The password reset link is invalid or has expired. Please request a new one.</p>
+                        <p><a href="/change-password">Request New Link</a></p>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+
+        const email = tokens[0].email;
+        const csrfToken = req.csrfToken();
+
+        // Step 2: Display the reset form
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Reset Password - MyBookShop</title>
+                <link rel="stylesheet" href="/login.css">
+            </head>
+            <body>
+                <header>
+                    <nav>
+                        <div class="icon">
+                            <a href="/">MyBookShop <img src="/image/icon.png" alt="Icon"></a>
+                        </div>
+                        <div class="navbar-list">
+                            <ul>
+                                <li><a href="/">Home</a></li>
+                                <li><a href="#">About Us</a></li>
+                                <li><a href="/logout">Logout</a></li>
+                            </ul>
+                        </div>
+                    </nav>
+                </header>
+
+                <div class="reset-password-container">
+                    <h2>Reset Your Password</h2>
+                    <form id="reset-password-form" method="POST" action="/reset-password/${nonce}">
+                        <input type="hidden" name="_csrf" value="${csrfToken}">
+                        <input type="hidden" name="email" value="${email}">
+                        <div class="form-group">
+                            <label for="new-password">New Password:</label>
+                            <input type="password" id="new-password" name="newPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm-password">Confirm New Password:</label>
+                            <input type="password" id="confirm-password" name="confirmPassword" required>
+                        </div>
+                        <button type="submit">Reset Password</button>
+                    </form>
+                    <p id="reset-error-message" style="color: red; display: none;"></p>
+                </div>
+
+                <script src="/login.js"></script>
+            </body>
+            </html>
+        `);
+    });
+});
+
+// POST /reset-password/:nonce - Process password reset
+app.post('/reset-password/:nonce', csrfProtection, async (req, res) => {
+    const { nonce } = req.params;
+    const { email, newPassword, confirmPassword } = req.body;
+    const currentTime = new Date();
+
+    // Step 1: Validate the nonce
+    const checkTokenSql = 'SELECT * FROM password_reset_tokens WHERE nonce = ? AND email = ? AND expires_at > ? AND used = FALSE';
+    connection.query(checkTokenSql, [nonce, email, currentTime], async (err, tokens) => {
+        if (err) {
+            console.error('Error checking reset token:', err);
+            return res.status(500).json({ message: 'Database error' });
+        }
+
+        if (tokens.length === 0) {
+            return res.status(400).json({ message: 'Invalid or expired reset link' });
+        }
+
+        // Step 2: Validate passwords
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({ message: 'New password and confirmation do not match' });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({ message: 'New password must be at least 8 characters long' });
+        }
+
+        try {
+            // Step 3: Hash the new password
+            const hashedPassword = await hashPassword(newPassword);
+
+            // Step 4: Update the user's password
+            const updatePasswordSql = 'UPDATE user SET password = ? WHERE email = ?';
+            connection.query(updatePasswordSql, [hashedPassword, email], (err) => {
+                if (err) {
+                    console.error('Error updating password:', err);
+                    return res.status(500).json({ message: 'Database error' });
+                }
+
+                // Step 5: Mark the token as used
+                const markTokenUsedSql = 'UPDATE password_reset_tokens SET used = TRUE WHERE nonce = ?';
+                connection.query(markTokenUsedSql, [nonce], (err) => {
+                    if (err) {
+                        console.error('Error marking token as used:', err);
+                        return res.status(500).json({ message: 'Database error' });
+                    }
+
+                    // Step 6: Destroy the session (if any) and redirect to login
+                    if (req.session) {
+                        req.session.destroy((err) => {
+                            if (err) {
+                                console.error('Error destroying session:', err);
+                            }
+                            res.json({ message: 'Password reset successfully. Please log in with your new password.' });
+                        });
+                    } else {
+                        res.json({ message: 'Password reset successfully. Please log in with your new password.' });
+                    }
+                });
+            });
+        } catch (err) {
+            console.error('Error hashing password:', err);
+            res.status(500).json({ message: 'Error hashing password' });
+        }
+    });
+});
+
 
 // Add category
 app.post('/add-category', isAdmin, (req, res) => {
