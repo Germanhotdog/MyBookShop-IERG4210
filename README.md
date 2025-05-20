@@ -1,4 +1,5 @@
 The Website is accessible at https://s13.ierg4210.ie.cuhk.edu.hk
+<br>
 <img width="385" alt="image" src="https://github.com/user-attachments/assets/f0a2958e-4720-4151-9b9d-a4fb8b2128ac" />
 
 Category Page:
@@ -13,11 +14,15 @@ Admin can create/delete products and categories.
 <img width="143" alt="image" src="https://github.com/user-attachments/assets/098d0037-d30a-461b-9d63-5e7d739083c1" />
 
 When user has logged in, user can be able to change password after inputting current password, new Password and Confirm New Password.
+<br>
 <img width="411" alt="image" src="https://github.com/user-attachments/assets/144373c6-3500-4072-a870-e95faaa344a4" />
 
 Perform a checkout flow:
+<br>
 <img width="201" alt="image" src="https://github.com/user-attachments/assets/01167f09-92f8-4c32-9098-461751826716" />
+<br>
 <img width="158" alt="image" src="https://github.com/user-attachments/assets/23935ccc-5f2f-41ac-84ac-4fe34239df02" />
+<br>
 <img width="114" alt="image" src="https://github.com/user-attachments/assets/a162a947-e841-4127-8e3d-4156a5cdc065" />
 
 The order is created, but it is not verified as Stripe had not confirmed the payment yet. Meanwhile, the admin panel can check can unverified order:
