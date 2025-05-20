@@ -138,13 +138,64 @@ footer form input[type="submit"]:hover {
     background-color: #777;
 }
 
-.change-password-container {
+.reset-password-container {
+    max-width: 400px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.recover-password-container {
+    max-width: 400px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+.recover-password-container h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.recover-password-container a {
+    color: #333;
+    text-decoration: none;
+}
+.recover-password-container a:hover {
+    text-decoration: underline;
+}
+
+.register-container {
     max-width: 400px;
     margin: 50px auto;
     padding: 20px;
     border: 1px solid #ccc;
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.register-container h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.register-container p {
+    margin-top: 15px;
+    color: #555;
+}
+
+.register-container a {
+    color: #333;
+    text-decoration: none;
+}
+
+.register-container a:hover {
+    text-decoration: underline;
 }
 
 .logout-container {
@@ -156,7 +207,25 @@ footer form input[type="submit"]:hover {
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
     text-align: center;
 }
+
 .logout-container button {
+    padding: 10px 20px;
+    background-color: #4CAF50; 
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: background-color 0.3s, transform 0.1s;
+    margin-bottom: 2px;
+}
+
+.logout-container button:hover {
+    background-color: #45a049; /* Darker green on hover */
+}
+
+.logout-container button#logout-button-main {
     width: 100%;
     padding: 10px;
     background-color: #dc3545;
@@ -165,6 +234,7 @@ footer form input[type="submit"]:hover {
     border-radius: 5px;
     cursor: pointer;
 }
-.logout-container button:hover {
+.logout-container button#logout-button-main:hover {
     background-color: #c82333;
+    margin-bottom: 2px;
 }
