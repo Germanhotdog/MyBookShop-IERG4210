@@ -1,0 +1,338 @@
+body {
+    margin: 0;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+
+header {
+    background-color: #264172;
+    padding: 15px 0;
+  }
+  
+nav {
+    display: flex;
+    justify-content: space-between;
+}
+
+.icon a{
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.icon a img{
+    width: 30px;
+    height: 30px;
+    vertical-align: middle;
+}
+
+.navbar-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+}
+
+.navbar-list ul li {
+    margin: 0 15px;
+}
+
+.navbar-list ul li a {
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
+}
+
+.navbar-list ul li a:hover {
+    color: black;
+    background-color: white;
+    border-radius: 5px;
+}
+
+
+.shopping-list {
+    display: none; 
+    position: absolute;
+    right: 0;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); 
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 1000; 
+    width: 200px; 
+}
+
+.shopping-list ul {
+    list-style: none;
+    display: flex; 
+    flex-direction: column;
+}
+
+.shopping-list li {
+    font-size: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee; 
+}
+
+.shopping-list button{
+    background-color: white;
+    border: 2px solid #264172;
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: small;
+    margin-top: 10px;
+}
+
+.shopping-list button:hover{
+    color: white;
+    background-color: #264172;
+    transition: background-color 0.3s ease;
+}
+
+
+
+
+.icon:hover .shopping-list {
+    display: block;
+}
+
+
+.hierarchical-nav{
+    background-color: azure;
+    height: 20px;
+}
+
+.hierarchical-nav a{
+    padding-left: 10px;
+    color: black;
+    font-size: small;
+    
+}
+
+.hierarchical-nav span{
+    color: gray;
+    font-size: small;
+}
+
+.main-container{
+    display: flex;
+}
+
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 60vh; /* Proportional to viewport height */
+    overflow: hidden;
+}
+
+.video-container video {
+    width: 100%;
+    height: auto;
+    min-height: 100%; /* Ensures the video fills the container height */
+    object-fit: cover; /* Scales the video to cover the container while maintaining aspect ratio */
+}
+
+.overlay-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: wheat;
+    font-size: 2rem;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+}
+
+/* Tablets and smaller desktops (max-width: 1024px) */
+@media (max-width: 1024px) {
+    .video-container {
+        height: 50vh; /* Slightly shorter on smaller screens */
+    }
+
+    .overlay-text {
+        font-size: 1.5rem; /* Smaller font size */
+        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7); /* Slightly smaller shadow for better readability */
+    }
+}
+
+/* Phones (max-width: 768px) */
+@media (max-width: 768px) {
+    .video-container {
+        height: 40vh; /* Shorter on phones */
+    }
+
+    .overlay-text {
+        font-size: 1.2rem; /* Even smaller font size for phones */
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+    }
+}
+
+/* Very small phones (max-width: 480px) */
+@media (max-width: 480px) {
+    .video-container {
+        height: 30vh; /* Very short on small phones */
+    }
+
+    .overlay-text {
+        font-size: 1rem; /* Smallest font size for very small screens */
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+    }
+}
+
+.side-nav{
+    width: 20%; 
+    background-color: white;
+    color: white;
+    margin-top: 100px;
+}
+
+.side-nav ul{
+    list-style: none;
+   
+}
+
+.side-nav ul li {
+    padding: 10px;
+    border: 1px solid #122447; 
+}
+
+.side-nav a{
+    color: black;
+    text-align: center;
+    text-decoration: none;
+}
+
+.side-nav a:hover{
+    color: white;
+}
+
+.side-nav ul li:hover{
+    background-color: #333;
+    transition: background-color 0.3s ease;
+}
+
+.flexbox{
+    width: 80%; 
+    display: flex;
+    flex-direction: column;
+}
+
+.top10{
+    text-align: center;
+}
+
+.flex-container{
+    display:flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 50px;
+    margin-bottom: 50px;
+}
+
+
+.flex-container > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 20%;
+    margin-bottom: 30px;
+  }
+
+.PriceButton-container{
+    display: flex;
+    flex-direction: row;
+    margin-top: 3px;
+}
+
+
+.PriceButton-container button{
+    background-color: white;
+    border: 2px solid #264172;
+    border-radius: 5px;
+    padding: 12px 8px;
+    font-size: small;
+    margin-left: 30px;
+}
+
+.PriceButton-container button:hover{
+    color: white;
+    background-color: #264172;
+    transition: background-color 0.3s ease;
+}
+
+.flex-container div img{
+    width: 200px;
+    height: 200px;
+}
+
+.magazine a > img{
+    width: 200px;
+    height: 280px;
+}
+
+.flex-container div a{
+    display: flex;
+    flex-direction: column; 
+    text-align: center; 
+    text-decoration: none;
+    color: black;
+}
+  
+
+.footer{
+    display: flex; 
+    justify-content: space-between; 
+    padding: 40px;
+    background-color: #122447;
+    color: white;
+}
+
+.footer section {
+    flex: 1;
+    min-width: 200px;
+    max-width: 250px;
+}
+
+.footer section:last-child {
+    max-width: 350px;
+    min-width: 300px;
+}
+
+.footer section .fb-page {
+  margin-top: 10px;
+  display: block;
+  max-width: 100%;
+}
+
+
+
+@media (max-width: 1200px) {
+    .flex-container > div {
+        width: 25%; 
+    }
+}
+
+@media (max-width: 992px) {
+    .flex-container > div {
+        width: 33.33%; 
+    }
+}
+
+@media (max-width: 768px) {
+    .flex-container > div {
+        width: 50%; 
+    }
+}
+
+@media (max-width: 480px) {
+    .flex-container > div {
+        width: 100%; 
+    }
+}

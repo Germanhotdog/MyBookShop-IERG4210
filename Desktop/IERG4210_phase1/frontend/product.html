@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Main Page</title>
+    <link rel="stylesheet" href="./css/product.css">
+
+  </head>
+
+  <body>
+
+    <header>
+            <nav >
+                <div class="icon">
+                    <a href="./index.html"> MyBookShop <img src="./image/icon.png" alt="Icon"></a>
+                </div>
+
+                <div class="navbar-list">
+                    <ul >
+                        <li><a href="./index.html">Home</a></li>
+                        <li><a href="#">About Us</a></li>
+                        <li><a href="https://s13.ierg4210.ie.cuhk.edu.hk/login">Welcome, <span id="username">guest</span></a></li>
+                        <li class="icon">
+                            <a href="https://s13.ierg4210.ie.cuhk.edu.hk/checkout"> shopping list <img src="./image/cart.png" alt="cart" ></a>
+                        
+
+                            <div class="shopping-list">
+                                <ul id="cart-items">
+                                    <!-- Cart items will be dynamically added here -->
+                                </ul>
+                                <p>Total: $<span id="cart-total">0.00</span></p>
+                                <a href="https://s13.ierg4210.ie.cuhk.edu.hk/checkout"><button id="checkout-btn">Checkout</button></a>
+                            </div>
+                        </li>
+                    </ul>
+
+                </div>
+            </nav>
+
+
+        </header>
+
+    <div class="hierarchical-nav">
+        <!-- Dynamic breadcrumb will be inserted here -->
+    </div>
+
+    <div class="main-container">
+        <div class="product-container">
+            <!-- Dynamic product content will be inserted here -->
+        </div>
+
+        
+
+        
+    </div>
+
+        
+    
+    <footer class="footer">
+
+
+            <section>
+                About Us<br>
+                <div >
+                    <p >Working hour:</p>
+                    <p >Mon-Fri: 10:00-21:00</p>
+                    <p >Sat: 10:00-17:00</p>
+                    <p >Sun: Close</p>
+                
+                </div>
+            </section>
+
+
+            <section>
+                Contact<br>
+                <div >
+                        <p >Chinese University of Hong Kong, Shatin, Hong Kong</p>
+                        <p >+852 1234 5678</p>
+                        <p >mybookshop@gmail.com</p>
+                    
+                </div>
+            </section>
+
+            <section>
+                Weekly Newsletter<br>
+                <form action="">
+                    <input type="email" placeholder="Your Email here" id="" required />
+                    <input type="submit" value="Subscribe Now" />
+                </form>
+            </section>
+
+
+
+    </footer>
+
+    <script src="./js/product.js"></script>
+    </body>

@@ -1,0 +1,19 @@
+/* Style for the checkout item container */
+.checkout-item {
+    border-bottom: 1px solid #ccc;
+    padding: 10px 0;
+    margin-bottom: 10px;
+}
+
+/* Resize the image */
+.checkout-item img {
+    width: 100px;  /* Set the desired width */
+    height: 100px; /* Set the desired height */
+    object-fit: cover; /* Ensure the image scales properly without distortion */
+    margin-right: 10px; /* Add some spacing between the image and text */
+}
+
+/* Style for the error message */
+.error {
+    color: red;
+}
